@@ -1,6 +1,7 @@
-
 using Dates
 using LinearAlgebra
+
+include("TimeFrame.jl")
 
 abstract type TimeSeries{V} end
 
@@ -629,16 +630,45 @@ power(sh::ScheduleHistory) = VariableIntervalTimeSeries(sh.t, sh.powerKw)
 Both `length(t)` and `length(SOC)` should equal to `length(powerKw) + 1`.
 """
 struct OperationHistory
-    t::AbstractVector{Dates.DateTime}
-    powerKw::AbstractVector{Float64}
-    SOC::AbstractVector{Float64}
-    SOH::AbstractVector{Float64}
+    data::TimeFrame
+    
+    function OperationHistory(
+        t::AbstractVector{DateTime},
+        powerKw::AbstractVector{Float64},
+        SOC::AbstractVector{Float64},
+        SOH::AbstractVector{Float64}
+    )
+        if length(t) != length(SOC) || length(t) != length(SOH)
+            error("Length mismatch: t, SOC, and SOH must have the same length")
+        end
+        if length(powerKw) != length(t) - 1
+            error("Length mismatch: powerKw must have length equal to length(t) - 1")
+        end
+        
+        data = TimeFrame(
+            t,
+            Dict(
+                :powerKw => (PeriodType(), powerKw),
+                :SOC => (PointType(), SOC),
+                :SOH => (PointType(), SOH)
+            )
+        )
+        new(data)
+    end
+end
+
+function Base.getproperty(op::OperationHistory, sym::Symbol)
+    if sym == :data
+        return getfield(op, :data)
+    elseif sym == :t
+        return op.data.timestamps
+    else
+        return op.data[sym]
+    end
 end
 
 start_time(op::OperationHistory) = op.t[1]
-
 end_time(op::OperationHistory) = op.t[end]
-
 power(op::OperationHistory) = VariableIntervalTimeSeries(op.t, op.powerKw)
 
 discharged_energy(op::OperationHistory) = begin
@@ -658,7 +688,7 @@ Base.iterate(op::OperationHistory, index = 1) =
     ((op.t[index], op.t[index+1], op.powerKw[index]), index + 1)
 
 Base.eltype(::Type{OperationHistory}) = Tuple{DateTime,DateTime,Float64}
-Base.length(op::OperationHistory) = min(length(op.powerKw), length(op.t) - 1)
+Base.length(op::OperationHistory) = length(op.powerKw)
 
 mutable struct Progress
     progressPct::Float64
