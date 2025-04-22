@@ -176,19 +176,35 @@ end
 The value of time series is defined as `value[i]` during the `i`th time period (from `t[i]` to `t[i + 1]`),
 where `1 ≤ i ≤ length(value)` and `length(t) == length(value) + 1`.
 """
-struct VariableIntervalTimeSeries{V} <: TimeSeries{V}
+abstract type VariableIntervalTimeSeries{V} <: TimeSeries{V} end
+
+struct VariableIntervalPeriodTimeSeries{V} <: VariableIntervalTimeSeries{V}
     t::Vector{Dates.DateTime}
     value::Vector{V}
-    VariableIntervalTimeSeries(t, v::AbstractVector{V}) where {V} =
+    VariableIntervalPeriodTimeSeries(t, v::AbstractVector{V}) where {V} =
         length(t) == length(v) + 1 ? new{V}(t, v) : error("Incompatible lengths")
 end
 
-Base.iterate(ts::VariableIntervalTimeSeries, index = 1) =
+struct VariableIntervalPointTimeSeries{V} <: VariableIntervalTimeSeries{V}
+    t::Vector{Dates.DateTime}
+    value::Vector{V}
+    VariableIntervalPointTimeSeries(t, v::AbstractVector{V}) where {V} =
+        length(t) == length(v) ? new{V}(t, v) : error("Incompatible lengths")
+end
+
+Base.iterate(ts::VariableIntervalPeriodTimeSeries, index = 1) =
     index > length(ts) ? nothing :
     ((ts.value[index], ts.t[index], ts.t[index+1]), index + 1)
+Base.eltype(::Type{VariableIntervalPeriodTimeSeries{V}}) where {V} =
+    Tuple{V,DateTime,DateTime}
+Base.length(ts::VariableIntervalPeriodTimeSeries) = length(ts.value)
 
-Base.eltype(::Type{VariableIntervalTimeSeries{V}}) where {V} = Tuple{V,DateTime,DateTime}
-Base.length(ts::VariableIntervalTimeSeries) = length(ts.value)
+Base.iterate(ts::VariableIntervalPointTimeSeries, index = 1) =
+    index > length(ts) ? nothing :
+    (((ts.value[index], ts.value[index+1]), ts.t[index], ts.t[index+1]), index + 1)
+Base.eltype(::Type{VariableIntervalPointTimeSeries{V}}) where {V} =
+    Tuple{V,DateTime,DateTime}
+Base.length(ts::VariableIntervalPointTimeSeries) = length(ts.value) - 1
 
 start_time(ts::VariableIntervalTimeSeries) = ts.t[1]
 
@@ -280,22 +296,20 @@ mean(ts::VariableIntervalTimeSeries) =
 ############## FixedIntervalTimeSeries ########################
 abstract type FixedIntervalTimeSeries{R<:Dates.Period,V} <: TimeSeries{V} end
 
-abstract type PointTimeSeries <: TimeSeries end
+# abstract type PointTimeSeries <: TimeSeries end
 
-abstract type PeriodTimeSeries <: TimeSeries end
+# abstract type PeriodTimeSeries <: TimeSeries end
 
-is_period(::PeriodTimeSeries) = true
-is_period(::PointTimeSeries) = false
+# is_period(::PeriodTimeSeries) = true
+# is_period(::PointTimeSeries) = false
 
-struct FixedIntervalPeriodTimeSeries{R<:Dates.Period,V} <:
-       FixedIntervalTimeSeries{R<:Dates.Period,V}
+struct FixedIntervalPeriodTimeSeries{R<:Dates.Period,V} <: FixedIntervalTimeSeries{R,V}
     tStart::Dates.DateTime
     resolution::R
     value::Vector{V}
 end
 
-struct FixedIntervalPointTimeSeries{R<:Dates.Period,V} <:
-       FixedIntervalTimeSeries{R<:Dates.Period,V}
+struct FixedIntervalPointTimeSeries{R<:Dates.Period,V} <: FixedIntervalTimeSeries{R,V}
     tStart::Dates.DateTime
     resolution::R
     value::Vector{V}
@@ -326,9 +340,9 @@ Base.iterate(ts::FixedIntervalPointTimeSeries, index = 1) =
         index + 1,
     )
 
-Base.eltype(::Type{FixedIntervalTimePeriodSeries{<:Dates.Period,V}}) where {V} =
+Base.eltype(::Type{FixedIntervalPeriodTimeSeries{<:Dates.Period,V}}) where {V} =
     Tuple{V,DateTime,DateTime}
-Base.eltype(::Type{FixedIntervalTimePointSeries{<:Dates.Period,V}}) where {V} =
+Base.eltype(::Type{FixedIntervalPointTimeSeries{<:Dates.Period,V}}) where {V} =
     Tuple{Tuple{V,V},DateTime,DateTime}
 
 Base.length(ts::FixedIntervalPeriodTimeSeries) = length(ts.value)
@@ -374,26 +388,36 @@ function extract(ts::FixedIntervalTimeSeries, tStart::DateTime, tEnd::DateTime)
     t2 = min(tEnd, end_time(ts))
     if t1 < end_time(ts) && t2 ≥ start_time(ts)
         # some overlap time period
-        idx1 = div(t1 - ts.tStart, ts.resolution) + 1
-        idx2 = ceil(Int, (t2 - ts.tStart) / ts.resolution)
-        if Dates.value((t1 - start_time(ts)) % ts.resolution) === 0 &&
-           Dates.value((t2 - start_time(ts)) % ts.resolution) === 0
+        idx1, rem1 = divrem(t1 - start_time(ts), ts.resolution)
+        idx2, rem2 = divrem(t2 - start_time(ts), ts.resolution)
+        if Dates.value(rem1) === 0 && Dates.value(rem2) === 0
             # Both start and end are aligned with resolution
             typeof(ts)(
-                ts.tStart + ts.resolution * (idx1 - 1),
+                ts.tStart + ts.resolution * idx1,
                 ts.resolution,
                 get_values(ts, tStart, tEnd),
             )
         else
-            if is_period(ts)
+            if ts isa FixedIntervalPeriodTimeSeries
                 VariableIntervalPeriodTimeSeries(
-                    [t1, (ts.tStart .+ (ts.resolution .* (idx1:idx2-1)))..., t2],
-                    get_values(ts, tStart, tEnd)
+                    [t1, (ts.tStart .+ (ts.resolution .* ((idx1+1):idx2)))..., t2],
+                    get_values(ts, tStart, tEnd),
                 )
             else
+                λ1 = rem1 / ts.resolution
+                λ2 = rem2 / ts.resolution
                 VariableIntervalPointTimeSeries(
-                    [t1, (ts.tStart .+ (ts.resolution .* (idx1:idx2-1)))..., t2],
-                    get_values(ts, tStart, tEnd)
+                    vcat(
+                        [t1, (ts.tStart .+ (ts.resolution .* ((idx1+1):idx2)))...],
+                        λ2 > 0 ? [t2] : [],
+                    ),
+                    vcat(
+                        [
+                            ts.value[idx1+1] * (1 - λ1) + ts.value[idx1+2] * λ1,
+                            ts.value[(idx1+2):(idx2+1)]...,
+                        ],
+                        λ2 > 0 ? [ts.value[idx2+1] * (1 - λ2) + ts.value[idx2+2] * λ2] : [],
+                    ),
                 )
             end
         end

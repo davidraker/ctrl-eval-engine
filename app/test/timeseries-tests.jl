@@ -2,17 +2,81 @@ using Dates
 using LinearAlgebra
 
 @testset "Fixed Interval" begin
-    @testset "Extraction" begin
-        ts1 = FixedIntervalTimeSeries(DateTime(2022), Hour(1), collect(1:5))
+    @testset "Period Series Extraction" begin
+        ts1 = FixedIntervalPeriodTimeSeries(DateTime(2022), Hour(1), collect(1:5))
         ts2 = extract(ts1, DateTime(2022, 1, 1, 2), DateTime(2022, 1, 1, 4))
-        @test ts2 isa FixedIntervalTimeSeries
+        @test ts2 isa FixedIntervalPeriodTimeSeries
         @test all(ts2.value .== [3, 4])
 
         ts3 = extract(ts1, DateTime(2022, 1, 1, 1, 30), DateTime(2022, 1, 1, 4, 30))
-        @test ts3 isa VariableIntervalTimeSeries
+        @test ts3 isa VariableIntervalPeriodTimeSeries
         @test start_time(ts3) == DateTime(2022, 1, 1, 1, 30)
         @test end_time(ts3) == DateTime(2022, 1, 1, 4, 30)
         @test all(ts3.value .== 2:5)
+    end
+
+    @testset "Point Series Extraction" begin
+        ts1 = FixedIntervalPointTimeSeries(DateTime(2022), Hour(1), collect(1:5))
+
+        # Both ends on grid
+        ts2a = extract(ts1, DateTime(2022, 1, 1, 2), DateTime(2022, 1, 1, 4))
+        @test ts2a isa FixedIntervalPointTimeSeries
+        @test all(ts2a.value .== [3, 4, 5])
+
+        # t2 passes end time
+        ts2b = extract(ts1, DateTime(2022, 1, 1, 2), DateTime(2022, 1, 1, 4, 30))
+        @test ts2b isa FixedIntervalPointTimeSeries
+        @test end_time(ts2b) == DateTime(2022, 1, 1, 4)
+        @test all(ts2b.value .== [3, 4, 5])
+
+        # No time overlap
+        ts2c = extract(ts1, DateTime(2022, 1, 1, 5), DateTime(2022, 1, 1, 6, 30))
+        @test ts2c isa FixedIntervalPeriodTimeSeries
+        @test length(ts2c) == 0
+
+        # Both ends off grid
+        ts3 = extract(ts1, DateTime(2022, 1, 1, 1, 15), DateTime(2022, 1, 1, 3, 30))
+        @test ts3 isa VariableIntervalPointTimeSeries
+        @test start_time(ts3) == DateTime(2022, 1, 1, 1, 15)
+        @test end_time(ts3) == DateTime(2022, 1, 1, 3, 30)
+        @test all(
+            ts3.t .== [
+                DateTime(2022, 1, 1, 1, 15),
+                DateTime(2022, 1, 1, 2),
+                DateTime(2022, 1, 1, 3),
+                DateTime(2022, 1, 1, 3, 30),
+            ],
+        )
+        @test all(ts3.value .== [2.25, 3, 4, 4.5])
+
+        # t1 off grid
+        ts4 = extract(ts1, DateTime(2022, 1, 1, 1, 15), DateTime(2022, 1, 1, 3))
+        @test ts4 isa VariableIntervalPointTimeSeries
+        @test start_time(ts4) == DateTime(2022, 1, 1, 1, 15)
+        @test end_time(ts4) == DateTime(2022, 1, 1, 3)
+        @test all(
+            ts4.t .== [
+                DateTime(2022, 1, 1, 1, 15),
+                DateTime(2022, 1, 1, 2),
+                DateTime(2022, 1, 1, 3),
+            ],
+        )
+        @test all(ts4.value .== [2.25, 3, 4])
+
+        # t2 off grid
+        ts5 = extract(ts1, DateTime(2022, 1, 1, 1), DateTime(2022, 1, 1, 3, 30))
+        @test ts5 isa VariableIntervalPointTimeSeries
+        @test start_time(ts5) == DateTime(2022, 1, 1, 1)
+        @test end_time(ts5) == DateTime(2022, 1, 1, 3, 30)
+        @test all(
+            ts5.t .== [
+                DateTime(2022, 1, 1, 1),
+                DateTime(2022, 1, 1, 2),
+                DateTime(2022, 1, 1, 3),
+                DateTime(2022, 1, 1, 3, 30),
+            ],
+        )
+        @test all(ts5.value .== [2, 3, 4, 4.5])
     end
 
     @testset "Integral Operations" begin
