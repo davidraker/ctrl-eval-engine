@@ -278,7 +278,24 @@ mean(ts::VariableIntervalTimeSeries) =
     sum(diff(ts.t) ./ Hour(1) .* ts.value) / ((ts.t[end] - ts.t[1]) / Hour(1))
 
 ############## FixedIntervalTimeSeries ########################
-struct FixedIntervalTimeSeries{R<:Dates.Period,V} <: TimeSeries{V}
+abstract type FixedIntervalTimeSeries{R<:Dates.Period,V} <: TimeSeries{V} end
+
+abstract type PointTimeSeries <: TimeSeries end
+
+abstract type PeriodTimeSeries <: TimeSeries end
+
+is_period(::PeriodTimeSeries) = true
+is_period(::PointTimeSeries) = false
+
+struct FixedIntervalPeriodTimeSeries{R<:Dates.Period,V} <:
+       FixedIntervalTimeSeries{R<:Dates.Period,V}
+    tStart::Dates.DateTime
+    resolution::R
+    value::Vector{V}
+end
+
+struct FixedIntervalPointTimeSeries{R<:Dates.Period,V} <:
+       FixedIntervalTimeSeries{R<:Dates.Period,V}
     tStart::Dates.DateTime
     resolution::R
     value::Vector{V}
@@ -287,7 +304,7 @@ end
 VariableIntervalTimeSeries(ts::FixedIntervalTimeSeries) =
     VariableIntervalTimeSeries(timestamps(ts), ts.value)
 
-Base.iterate(ts::FixedIntervalTimeSeries, index = 1) =
+Base.iterate(ts::FixedIntervalPeriodTimeSeries, index = 1) =
     index > length(ts) ? nothing :
     (
         (
@@ -298,9 +315,24 @@ Base.iterate(ts::FixedIntervalTimeSeries, index = 1) =
         index + 1,
     )
 
-Base.eltype(::Type{FixedIntervalTimeSeries{<:Dates.Period,V}}) where {V} =
+Base.iterate(ts::FixedIntervalPointTimeSeries, index = 1) =
+    index > length(ts) ? nothing :
+    (
+        (
+            (ts.value[index], ts.value[index+1]),
+            ts.tStart + ts.resolution * (index - 1),
+            ts.tStart + ts.resolution * index,
+        ),
+        index + 1,
+    )
+
+Base.eltype(::Type{FixedIntervalTimePeriodSeries{<:Dates.Period,V}}) where {V} =
     Tuple{V,DateTime,DateTime}
-Base.length(ts::FixedIntervalTimeSeries) = length(ts.value)
+Base.eltype(::Type{FixedIntervalTimePointSeries{<:Dates.Period,V}}) where {V} =
+    Tuple{Tuple{V,V},DateTime,DateTime}
+
+Base.length(ts::FixedIntervalPeriodTimeSeries) = length(ts.value)
+Base.length(ts::FixedIntervalPointTimeSeries) = length(ts.value) - 1
 
 start_time(ts::FixedIntervalTimeSeries) = ts.tStart
 
@@ -309,7 +341,9 @@ end_time(ts::FixedIntervalTimeSeries) = ts.tStart + ts.resolution * length(ts)
 timestamps(ts::FixedIntervalTimeSeries) =
     range(ts.tStart; step = ts.resolution, length = length(ts) + 1)
 
-function get_values(ts::FixedIntervalTimeSeries, tStart::DateTime, tEnd::DateTime)
+# ==================== WIP ========================
+
+function get_values(ts::FixedIntervalPeriodTimeSeries, tStart::DateTime, tEnd::DateTime)
     t1 = max(tStart, start_time(ts))
     t2 = min(tEnd, end_time(ts))
     if t1 < end_time(ts) && t2 ≥ start_time(ts)
@@ -317,6 +351,19 @@ function get_values(ts::FixedIntervalTimeSeries, tStart::DateTime, tEnd::DateTim
         idx1 = div(t1 - ts.tStart, ts.resolution) + 1
         idx2 = ceil(Int, (t2 - ts.tStart) / ts.resolution)
         ts.value[idx1:idx2]
+    else
+        eltype(ts.value)[]
+    end
+end
+
+function get_values(ts::FixedIntervalPointTimeSeries, tStart::DateTime, tEnd::DateTime)
+    t1 = max(tStart, start_time(ts))
+    t2 = min(tEnd, end_time(ts))
+    if t1 < end_time(ts) && t2 ≥ start_time(ts)
+        # some overlap time period
+        idx1 = div(t1 - ts.tStart, ts.resolution) + 1
+        idx2 = ceil(Int, (t2 - ts.tStart) / ts.resolution)
+        ts.value[idx1:idx2+1]
     else
         eltype(ts.value)[]
     end
@@ -332,19 +379,26 @@ function extract(ts::FixedIntervalTimeSeries, tStart::DateTime, tEnd::DateTime)
         if Dates.value((t1 - start_time(ts)) % ts.resolution) === 0 &&
            Dates.value((t2 - start_time(ts)) % ts.resolution) === 0
             # Both start and end are aligned with resolution
-            FixedIntervalTimeSeries(
+            typeof(ts)(
                 ts.tStart + ts.resolution * (idx1 - 1),
                 ts.resolution,
-                ts.value[idx1:idx2],
+                get_values(ts, tStart, tEnd),
             )
         else
-            VariableIntervalTimeSeries(
-                [t1, (ts.tStart .+ (ts.resolution .* (idx1:idx2-1)))..., t2],
-                ts.value[idx1:idx2],
-            )
+            if is_period(ts)
+                VariableIntervalPeriodTimeSeries(
+                    [t1, (ts.tStart .+ (ts.resolution .* (idx1:idx2-1)))..., t2],
+                    get_values(ts, tStart, tEnd)
+                )
+            else
+                VariableIntervalPointTimeSeries(
+                    [t1, (ts.tStart .+ (ts.resolution .* (idx1:idx2-1)))..., t2],
+                    get_values(ts, tStart, tEnd)
+                )
+            end
         end
     else
-        FixedIntervalTimeSeries(tStart, ts.resolution, Float64[])
+        FixedIntervalPeriodTimeSeries(tStart, ts.resolution, Float64[])
     end
 end
 
@@ -631,12 +685,12 @@ Both `length(t)` and `length(SOC)` should equal to `length(powerKw) + 1`.
 """
 struct OperationHistory
     data::TimeFrame
-    
+
     function OperationHistory(
         t::AbstractVector{DateTime},
         powerKw::AbstractVector{Float64},
         SOC::AbstractVector{Float64},
-        SOH::AbstractVector{Float64}
+        SOH::AbstractVector{Float64},
     )
         if length(t) != length(SOC) || length(t) != length(SOH)
             error("Length mismatch: t, SOC, and SOH must have the same length")
@@ -644,14 +698,14 @@ struct OperationHistory
         if length(powerKw) != length(t) - 1
             error("Length mismatch: powerKw must have length equal to length(t) - 1")
         end
-        
+
         data = TimeFrame(
             t,
             Dict(
                 :powerKw => (PeriodType(), powerKw),
                 :SOC => (PointType(), SOC),
-                :SOH => (PointType(), SOH)
-            )
+                :SOH => (PointType(), SOH),
+            ),
         )
         new(data)
     end
@@ -706,7 +760,8 @@ struct InitializationFailure <: Exception
     msg::String
 end
 
-Base.print(io::IO, e::InitializationFailure) = print(io, "Failed to initialize a scheduler or real-time controller: ", e.msg)
+Base.print(io::IO, e::InitializationFailure) =
+    print(io, "Failed to initialize a scheduler or real-time controller: ", e.msg)
 
 abstract type BatteryInput end
 
