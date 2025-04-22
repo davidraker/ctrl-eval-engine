@@ -79,18 +79,41 @@ using LinearAlgebra
         @test all(ts5.value .== [2, 3, 4, 4.5])
     end
 
-    @testset "Integral Operations" begin
-        ts1 = FixedIntervalTimeSeries(DateTime(2023), Hour(1), collect(1:5))
+    @testset "Period Series Integral & Mean" begin
+        ts1 = FixedIntervalPeriodTimeSeries(DateTime(2023), Hour(1), collect(1:5))
         @test integrate(ts1) == sum(1:5)
         @test integrate(ts1, DateTime(2023, 1, 1, 2), DateTime(2023, 1, 1, 5)) == sum(3:5)
         @test mean(ts1) == 3
         @test mean(ts1, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) == 2.5
 
-        ts2 = FixedIntervalTimeSeries(DateTime(2023), Minute(15), collect(1:5))
+        ts2 = FixedIntervalPeriodTimeSeries(DateTime(2023), Minute(15), collect(1:5))
         @test integrate(ts2) == sum(1:5) / 4
         @test integrate(ts2, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 5)) == 5 / 4
         @test mean(ts2) == 3
         @test mean(ts2, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) == 5 / 4 / 2
+    end
+
+    @testset "Point Series Integral & Mean" begin
+        ts1 = FixedIntervalPointTimeSeries(DateTime(2023), Hour(1), collect(1:5))
+        @test integrate(ts1) == 4 + (5 - 1) * 4 / 2
+        @test integrate(ts1, DateTime(2023, 1, 1, 2), DateTime(2023, 1, 1, 4)) ==
+              3 * 2 + (5 - 3) * 2 / 2
+        @test mean(ts1) == (1 + 5) / 2
+        @test mean(ts1, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) == (2 + 4) / 2
+
+        ts2 = FixedIntervalPointTimeSeries(DateTime(2023), Minute(15), collect(1:5))
+        @test integrate(ts2) == (4 + (5 - 1) * 4 / 2) / 4
+        @test integrate(ts2, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 4)) ==
+              (2 * 3 + (5 - 2) * 3 / 2) / 4
+        @test mean(ts2) == (1 + 5) / 2
+        @test mean(ts2, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) ==
+              (2 * 3 + (5 - 2) * 3 / 2) / 4 / 2
+
+        ts3 = FixedIntervalPointTimeSeries(DateTime(2023), Hour(1), [0, 1, 1, 3, 2])
+        @test integrate(ts3) == 0.5 + 1 + 2 + 2.5
+        @test integrate(ts3, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) == 1 + 1
+        @test mean(ts3) == (0.5 + 1 + 2 + 2.5) / 4
+        @test mean(ts3, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) == 2 / 2
     end
 end
 
