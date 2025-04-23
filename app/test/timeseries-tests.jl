@@ -103,17 +103,17 @@ using LinearAlgebra
 
         ts2 = FixedIntervalPointTimeSeries(DateTime(2023), Minute(15), collect(1:5))
         @test integrate(ts2) == (4 + (5 - 1) * 4 / 2) / 4
-        @test integrate(ts2, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 4)) ==
+        @test integrate(ts2, DateTime(2023, 1, 1, 0, 15), DateTime(2023, 1, 1, 4)) ==
               (2 * 3 + (5 - 2) * 3 / 2) / 4
         @test mean(ts2) == (1 + 5) / 2
-        @test mean(ts2, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) ==
+        @test mean(ts2, DateTime(2023, 1, 1, 0, 15), DateTime(2023, 1, 1, 2, 15)) ==
               (2 * 3 + (5 - 2) * 3 / 2) / 4 / 2
 
         ts3 = FixedIntervalPointTimeSeries(DateTime(2023), Hour(1), [0, 1, 1, 3, 2])
         @test integrate(ts3) == 0.5 + 1 + 2 + 2.5
-        @test integrate(ts3, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) == 1 + 1
+        @test integrate(ts3, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) == 1 + 2
         @test mean(ts3) == (0.5 + 1 + 2 + 2.5) / 4
-        @test mean(ts3, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) == 2 / 2
+        @test mean(ts3, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) == 3 / 2
     end
 end
 
