@@ -4,19 +4,21 @@ using JSON
 using Dates
 
 export evaluate_controller,
+    PeriodSeries,
+    PointSeries,
     TimeSeries,
     FixedIntervalTimeSeries,
-    FixedIntervalPeriodTimeSeries,
-    FixedIntervalPointTimeSeries,
     VariableIntervalTimeSeries,
     VariableIntervalPeriodTimeSeries,
     VariableIntervalPointTimeSeries,
     RepeatedTimeSeries,
+    TimeFrame,
     timestamps,
     get_values,
     start_time,
     end_time,
     sample,
+    upsample,
     integrate,
     cum_integrate,
     mean,
@@ -133,19 +135,19 @@ function update_progress!(progress::Progress, t::Dates.DateTime, setting::SimSet
 end
 
 function update_operation_history!(
-    opHistory::OperationHistory,
+    opHistory::TimeFrame,
     t::Dates.DateTime,
     ess::EnergyStorageSystem,
     powerKw::Real,
 )
+    push!(opHistory[:powerKw].value.vec, powerKw)
+    push!(opHistory[:SOC].value.vec, SOC(ess))
+    push!(opHistory[:SOH].value.vec, SOH(ess))
     push!(opHistory.t, t)
-    push!(opHistory.powerKw, powerKw)
-    push!(opHistory.SOC, SOC(ess))
-    push!(opHistory.SOH, SOH(ess))
 end
 
 function update_schedule_history!(
-    scheduleHistory::ScheduleHistory,
+    scheduleHistory::TimeFrame,
     currentSchedule::EnergyStorageScheduling.Schedule,
 )
     for schedulePeriod in currentSchedule
@@ -167,10 +169,10 @@ function update_schedule_period_progress!(
     actualPowerKw,
     duration::Dates.Period,
 )
-    if !isempty(spp.value) && spp.value[end] == actualPowerKw
+    if !isempty(spp.value) && spp.value.vec[end] == actualPowerKw
         spp.t[end] += duration
     else
-        push!(spp.value, actualPowerKw)
+        push!(spp.value.vec, actualPowerKw)
         push!(spp.t, spp.t[end] + duration)
     end
 end
@@ -283,7 +285,8 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
     )
 
     while t < setting.simEnd
-        currentSchedule = EnergyStorageScheduling.schedule(ess, scheduler, useCases, t, outputProgress)
+        currentSchedule =
+            EnergyStorageScheduling.schedule(ess, scheduler, useCases, t, outputProgress)
         update_schedule_history!(outputProgress.schedule, currentSchedule)
         for schedulePeriod in currentSchedule
             schedulePeriodEnd = min(end_time(schedulePeriod), setting.simEnd)

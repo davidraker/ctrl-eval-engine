@@ -1,29 +1,24 @@
-
-abstract type FixedIntervalTimeSeries{R<:Dates.Period,V} <: TimeSeries{V} end
-
-# abstract type PointTimeSeries <: TimeSeries end
-
-# abstract type PeriodTimeSeries <: TimeSeries end
-
 # is_period(::PeriodTimeSeries) = true
 # is_period(::PointTimeSeries) = false
 
-struct FixedIntervalPeriodTimeSeries{R<:Dates.Period,V} <: FixedIntervalTimeSeries{R,V}
+struct FixedIntervalTimeSeries{R<:Dates.Period,V,ST<:Series{V}} <: TimeSeries{V}
     tStart::Dates.DateTime
     resolution::R
-    value::Vector{V}
+    value::ST
 end
 
-struct FixedIntervalPointTimeSeries{R<:Dates.Period,V} <: FixedIntervalTimeSeries{R,V}
-    tStart::Dates.DateTime
-    resolution::R
-    value::Vector{V}
-end
+"""
+    FixedIntervalTimeSeries(tStart::DateTime, resolution::Period, v::AbstractVector)
+
+Create a fixed interval time series of the period type by default when constructor with an AbstractVector `v`.
+"""
+FixedIntervalTimeSeries(tStart::Dates.DateTime, resolution::Dates.Period, v::AbstractVector) =
+    FixedIntervalTimeSeries(tStart, resolution, PeriodSeries(v))
 
 VariableIntervalTimeSeries(ts::FixedIntervalTimeSeries) =
     VariableIntervalTimeSeries(timestamps(ts), ts.value)
 
-Base.iterate(ts::FixedIntervalPeriodTimeSeries, index = 1) =
+Base.iterate(ts::FixedIntervalTimeSeries, index = 1) =
     index > length(ts) ? nothing :
     (
         (
@@ -34,24 +29,18 @@ Base.iterate(ts::FixedIntervalPeriodTimeSeries, index = 1) =
         index + 1,
     )
 
-Base.iterate(ts::FixedIntervalPointTimeSeries, index = 1) =
-    index > length(ts) ? nothing :
-    (
-        (
-            (ts.value[index], ts.value[index+1]),
-            ts.tStart + ts.resolution * (index - 1),
-            ts.tStart + ts.resolution * index,
-        ),
-        index + 1,
-    )
+Base.eltype(
+    ::Type{
+        FixedIntervalTimeSeries{<:Dates.Period,V,ST},
+    } where {ST<:PeriodSeries{V}} where {V},
+) = Tuple{V,DateTime,DateTime}
+Base.eltype(
+    ::Type{
+        FixedIntervalTimeSeries{<:Dates.Period,V,ST},
+    } where {ST<:PointSeries{V}} where {V},
+) = Tuple{Tuple{V,V},DateTime,DateTime}
 
-Base.eltype(::Type{FixedIntervalPeriodTimeSeries{<:Dates.Period,V}}) where {V} =
-    Tuple{V,DateTime,DateTime}
-Base.eltype(::Type{FixedIntervalPointTimeSeries{<:Dates.Period,V}}) where {V} =
-    Tuple{Tuple{V,V},DateTime,DateTime}
-
-Base.length(ts::FixedIntervalPeriodTimeSeries) = length(ts.value)
-Base.length(ts::FixedIntervalPointTimeSeries) = length(ts.value) - 1
+Base.length(ts::FixedIntervalTimeSeries) = length(ts.value)
 
 start_time(ts::FixedIntervalTimeSeries) = ts.tStart
 
@@ -60,7 +49,7 @@ end_time(ts::FixedIntervalTimeSeries) = ts.tStart + ts.resolution * length(ts)
 timestamps(ts::FixedIntervalTimeSeries) =
     range(ts.tStart; step = ts.resolution, length = length(ts) + 1)
 
-function get_values(ts::FixedIntervalPeriodTimeSeries, tStart::DateTime, tEnd::DateTime)
+function get_values(ts::FixedIntervalTimeSeries, tStart::DateTime, tEnd::DateTime)
     t1 = max(tStart, start_time(ts))
     t2 = min(tEnd, end_time(ts))
     if t1 < end_time(ts) && t2 ≥ start_time(ts)
@@ -73,20 +62,11 @@ function get_values(ts::FixedIntervalPeriodTimeSeries, tStart::DateTime, tEnd::D
     end
 end
 
-function get_values(ts::FixedIntervalPointTimeSeries, tStart::DateTime, tEnd::DateTime)
-    t1 = max(tStart, start_time(ts))
-    t2 = min(tEnd, end_time(ts))
-    if t1 < end_time(ts) && t2 ≥ start_time(ts)
-        # some overlap time period
-        idx1 = div(t1 - ts.tStart, ts.resolution) + 1
-        idx2 = ceil(Int, (t2 - ts.tStart) / ts.resolution)
-        ts.value[idx1:idx2+1]
-    else
-        eltype(ts.value)[]
-    end
-end
-
-function extract(ts::FixedIntervalTimeSeries, tStart::DateTime, tEnd::DateTime)
+function extract(
+    ts::FixedIntervalTimeSeries{<:Dates.Period,V,ST},
+    tStart::DateTime,
+    tEnd::DateTime,
+) where {ST<:Series{V}} where {V}
     t1 = max(tStart, start_time(ts))
     t2 = min(tEnd, end_time(ts))
     if t1 < end_time(ts) && t2 ≥ start_time(ts)
@@ -95,38 +75,27 @@ function extract(ts::FixedIntervalTimeSeries, tStart::DateTime, tEnd::DateTime)
         idx2, rem2 = divrem(t2 - start_time(ts), ts.resolution)
         if Dates.value(rem1) === 0 && Dates.value(rem2) === 0
             # Both start and end are aligned with resolution
-            typeof(ts)(
+            FixedIntervalTimeSeries(
                 ts.tStart + ts.resolution * idx1,
                 ts.resolution,
-                get_values(ts, tStart, tEnd),
+                ts.value[(idx1+1):idx2],
             )
         else
-            if ts isa FixedIntervalPeriodTimeSeries
-                VariableIntervalPeriodTimeSeries(
-                    [t1, (ts.tStart .+ (ts.resolution .* ((idx1+1):idx2)))..., t2],
-                    get_values(ts, tStart, tEnd),
-                )
-            else
-                λ1 = rem1 / ts.resolution
-                λ2 = rem2 / ts.resolution
-                VariableIntervalPointTimeSeries(
-                    vcat(
-                        [t1, (ts.tStart .+ (ts.resolution .* ((idx1+1):idx2)))...],
-                        λ2 > 0 ? [t2] : [],
-                    ),
-                    vcat(
-                        [
-                            ts.value[idx1+1] * (1 - λ1) + ts.value[idx1+2] * λ1,
-                            ts.value[(idx1+2):(idx2+1)]...,
-                        ],
-                        λ2 > 0 ? [ts.value[idx2+1] * (1 - λ2) + ts.value[idx2+2] * λ2] : [],
-                    ),
-                )
-            end
+            VariableIntervalTimeSeries(
+                vcat(
+                    [t1, (ts.tStart .+ (ts.resolution .* ((idx1+1):idx2)))...],
+                    Dates.value(rem2) > 0 ? [t2] : Dates.DateTime[],
+                ),
+                extract(
+                    ts.value,
+                    (t1 - start_time(ts)) / ts.resolution,
+                    (t2 - start_time(ts)) / ts.resolution,
+                ),
+            )
         end
     else
-        # Return empty time series of same concrete type
-        typeof(ts)(tStart, ts.resolution, eltype(ts.value)[])
+        # Return empty time series of same value type
+        FixedIntervalTimeSeries(tStart, ts.resolution, ST())
     end
 end
 
@@ -162,15 +131,18 @@ get_index(ts::FixedIntervalTimeSeries, t::DateTime) = begin
     end
 end
 
-integrate(ts::FixedIntervalPeriodTimeSeries) = sum(ts.value) * (ts.resolution / Hour(1))
-integrate(ts::FixedIntervalPointTimeSeries) =
+integrate(ts::FixedIntervalTimeSeries{<:Dates.Period,V,<:PeriodSeries{V}} where {V}) =
+    sum(ts.value.vec) * (ts.resolution / Hour(1))
+integrate(ts::FixedIntervalTimeSeries{<:Dates.Period,V,<:PointSeries{V}} where {V}) =
     if length(ts) > 0
-        (sum(ts.value) - ts.value[1] / 2 - ts.value[end] / 2) * (ts.resolution / Hour(1))
+        (sum(ts.value.vec) - ts.value.vec[1] / 2 - ts.value.vec[end] / 2) *
+        (ts.resolution / Hour(1))
     else
         0
     end
 
-mean(ts::FixedIntervalPeriodTimeSeries) = sum(ts.value) / length(ts)
+mean(ts::FixedIntervalTimeSeries{<:Dates.Period,V,<:PeriodSeries{V}} where {V}) =
+    sum(ts.value.vec) / length(ts)
 
 function is_aligned(ts1::FixedIntervalTimeSeries, ts2::FixedIntervalTimeSeries)
     resSmaller, resLarger =
@@ -194,13 +166,13 @@ function binary_operation(ts1::FixedIntervalTimeSeries, ts2::FixedIntervalTimeSe
     resMultiple1 = ts1.resolution ÷ res
     iStart1 = (ts1.tStart - tStart) ÷ res + 1
     vLength1 = length(ts1) * resMultiple1
-    v1[iStart1:iStart1+vLength1-1] = repeat(ts1.value; inner = resMultiple1)
+    v1[iStart1:iStart1+vLength1-1] = upsample(ts1.value, resMultiple1).vec
 
     v2 = zeros(eltype(ts2.value), vLength)
     resMultiple2 = ts2.resolution ÷ res
     iStart2 = (ts2.tStart - tStart) ÷ res + 1
     vLength2 = length(ts2) * resMultiple2
-    v2[iStart2:iStart2+vLength2-1] = repeat(ts2.value; inner = resMultiple2)
+    v2[iStart2:iStart2+vLength2-1] = upsample(ts2.value, resMultiple2).vec
 
     v = op.(v1, v2)
     FixedIntervalTimeSeries(tStart, res, v)

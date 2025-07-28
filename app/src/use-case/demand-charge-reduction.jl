@@ -156,8 +156,8 @@ calculate_net_benefit(progress::Progress, ucDCR::DemandChargeReduction) = begin
 end
 
 function calculate_metrics(
-    ::ScheduleHistory,
-    operation::OperationHistory,
+    ::TimeFrame,
+    operation::TimeFrame,
     ucDCR::DemandChargeReduction,
 )
     @debug "Calculating metrics for Demand Charge Reduction"
@@ -176,7 +176,7 @@ function calculate_metrics(
     ]
 end
 
-use_case_charts(::ScheduleHistory, op::OperationHistory, ucDCR::DemandChargeReduction) =
+use_case_charts(::TimeFrame, op::TimeFrame, ucDCR::DemandChargeReduction) =
     begin
         @debug "Generating time series charts for Demand Charge Reduction"
 

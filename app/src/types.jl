@@ -3,6 +3,91 @@ using LinearAlgebra
 
 abstract type TimeSeries{V} end
 
+abstract type Series{V} end
+
+Base.iterate(s::Series, index = 1) = index > length(s) ? nothing : (s[index], index + 1)
+
+Base.getindex(s::Series, indices::AbstractVector{<:Real}) = [s[i] for i in indices]
+
+struct PeriodSeries{V} <: Series{V}
+    vec::Vector{V}
+end
+PeriodSeries{V}() where {V} = PeriodSeries{V}(V[])
+PeriodSeries(v::AbstractVector{V}) where {V} = PeriodSeries{V}(v)
+
+Base.getindex(s::PeriodSeries{V}, i::Integer) where {V} = s.vec[i]
+Base.getindex(s::PeriodSeries{V}, r::AbstractUnitRange{<:Integer}) where {V} =
+    PeriodSeries(s.vec[r])
+Base.getindex(s::PeriodSeries{V}, i::Real) where {V} =
+    0 ≤ i < length(s) ? s.vec[floor(Int, i)+1] : zero(eltype(s.vec))
+Base.lastindex(s::PeriodSeries) = lastindex(s.vec)
+
+Base.length(s::PeriodSeries{V}) where {V} = length(s.vec)
+Base.eltype(::Type{PeriodSeries{V}}) where {V} = V
+
+extract(s::PeriodSeries, i1::Real, i2::Real) = begin
+    idx1 = div(i1, 1.0)
+    idx2, rem2 = divrem(i2, 1.0)
+    PeriodSeries(s[vcat([i1], (idx1+1):(idx2-1), rem2 > 0 ? [i2] : Float64[])])
+end
+
+upsample(s::PeriodSeries, n::Integer) = begin
+    if n < 1
+        error("Upsampling factor must be greater than or equal to 1")
+    end
+    PeriodSeries(repeat(s.vec; inner = n))
+end
+
+struct PointSeries{V} <: Series{V}
+    vec::Vector{V}
+
+    function PointSeries{V}(v::AbstractVector{V} = V[]) where {V}
+        if length(v) ≥ 1
+            new(v)
+        else
+            new(V[])
+        end
+    end
+end
+PointSeries(v::AbstractVector{V}) where {V} = PointSeries{V}(v)
+
+Base.getindex(s::PointSeries, i::Integer) = (s.vec[i], s.vec[i+1])
+Base.getindex(s::PointSeries, r::AbstractUnitRange{<:Integer}) =
+    PointSeries(s.vec[r[1]:r[end]+1])
+Base.getindex(s::PointSeries, i::Real) = begin
+    idx, λ = fldmod(i, 1.0)
+    if λ == 0.0
+        s.vec[Int(idx)+1]
+    elseif 0 ≤ idx < length(s)
+        s.vec[Int(idx)+1] * (1 - λ) + s.vec[Int(idx)+2] * λ
+    else
+        zero(eltype(s.vec))
+    end
+end
+Base.lastindex(s::PointSeries) = lastindex(s.vec) - 1
+
+Base.length(s::PointSeries) = length(s.vec) ≥ 2 ? length(s.vec) - 1 : 0
+Base.eltype(::Type{PointSeries{V}}) where {V} = Tuple{V,V}
+
+extract(s::PointSeries, i1::Real, i2::Real) = begin
+    idx1 = div(i1, 1.0)
+    idx2, rem2 = divrem(i2, 1.0)
+    PointSeries(s[vcat([i1], (idx1+1):idx2, rem2 > 0 ? [i2] : Float64[])])
+end
+
+upsample(s::PointSeries, n::Integer) = begin
+    if n < 1
+        error("Upsampling factor must be greater than or equal to 1")
+    end
+    PointSeries(
+        reduce(
+            vcat,
+            [[(seg[1] * (n - i) + seg[2] * i) / n for i = 1:n] for seg in s];
+            init = [s.vec[1]],
+        ),
+    )
+end
+
 include("time-frame/VariableIntervalTimeSeries.jl")
 include("time-frame/FixedIntervalTimeSeries.jl")
 include("time-frame/RepeatedTimeSeries.jl")
@@ -181,17 +266,26 @@ get_temperature(setting::SimSetting, t::Dates.DateTime) =
     setting.temperature isa Real ? setting.temperature :
     get_period(setting.temperature, t)[1]
 
-struct ScheduleHistory
-    t::AbstractVector{Dates.DateTime}
-    powerKw::AbstractVector{Float64}
-    SOC::AbstractVector{Float64}
-    regCapKw::AbstractVector{Float64}
-end
+ScheduleHistory(
+    t::AbstractVector{Dates.DateTime},
+    p::AbstractVector{<:Real},
+    soc::AbstractVector{<:Real},
+    reg::AbstractVector{<:Real},
+) = TimeFrame(
+    t,
+    [PeriodSeries(p), PointSeries(soc), PeriodSeries(reg)],
+    [:powerKw, :SOC, :regCapKw],
+)
 
-ScheduleHistory(t::AbstractVector{Dates.DateTime}, p::AbstractVector{Float64}) =
+# struct ScheduleHistory
+#     t::AbstractVector{Dates.DateTime}
+#     powerKw::AbstractVector{Float64}
+#     SOC::AbstractVector{Float64}
+#     regCapKw::AbstractVector{Float64}
+# end
+
+ScheduleHistory(t::AbstractVector{Dates.DateTime}, p::AbstractVector{<:Real}) =
     ScheduleHistory(t, p, zeros(length(p) + 1), zeros(length(p)))
-
-power(sh::ScheduleHistory) = VariableIntervalTimeSeries(sh.t, sh.powerKw)
 
 """
     OperationHistory
@@ -199,71 +293,73 @@ power(sh::ScheduleHistory) = VariableIntervalTimeSeries(sh.t, sh.powerKw)
 `OperationHistory` represents the operation history of an ESS over a period of time with corresponding timestamps `t`.
 Both `length(t)` and `length(SOC)` should equal to `length(powerKw) + 1`.
 """
-struct OperationHistory
-    data::TimeFrame
+OperationHistory(
+    t::AbstractVector{Dates.DateTime},
+    p::AbstractVector{<:Real},
+    soc::AbstractVector{<:Real},
+    soh::AbstractVector{<:Real},
+) = TimeFrame(
+    t,
+    [PeriodSeries(p), PointSeries(soc), PointSeries(soh)],
+    [:powerKw, :SOC, :SOH],
+)
 
-    function OperationHistory(
-        t::AbstractVector{DateTime},
-        powerKw::AbstractVector{Float64},
-        SOC::AbstractVector{Float64},
-        SOH::AbstractVector{Float64},
-    )
-        if length(t) != length(SOC) || length(t) != length(SOH)
-            error("Length mismatch: t, SOC, and SOH must have the same length")
-        end
-        if length(powerKw) != length(t) - 1
-            error("Length mismatch: powerKw must have length equal to length(t) - 1")
-        end
+# struct OperationHistory
+#     data::TimeFrame
 
-        data = TimeFrame(
-            t,
-            Dict(
-                :powerKw => (PeriodType(), powerKw),
-                :SOC => (PointType(), SOC),
-                :SOH => (PointType(), SOH),
-            ),
-        )
-        new(data)
-    end
+#     function OperationHistory(
+#         t::AbstractVector{DateTime},
+#         powerKw::AbstractVector{Float64},
+#         SOC::AbstractVector{Float64},
+#         SOH::AbstractVector{Float64},
+#     )
+#         if length(t) != length(SOC) || length(t) != length(SOH)
+#             error("Length mismatch: t, SOC, and SOH must have the same length")
+#         end
+#         if length(powerKw) != length(t) - 1
+#             error("Length mismatch: powerKw must have length equal to length(t) - 1")
+#         end
+
+#         data = TimeFrame(
+#             t,
+#             Dict(
+#                 :powerKw => (PeriodType(), powerKw),
+#                 :SOC => (PointType(), SOC),
+#                 :SOH => (PointType(), SOH),
+#             ),
+#         )
+#         new(data)
+#     end
+# end
+
+# function Base.getproperty(op::OperationHistory, sym::Symbol)
+#     if sym == :data
+#         return getfield(op, :data)
+#     elseif sym == :t
+#         return op.data.timestamps
+#     else
+#         return op.data[sym]
+#     end
+# end
+
+discharged_energy(op::TimeFrame) = begin
+    pOP = op[:powerKw]
+    dischargePeriods = pOP.value.vec .> 0
+    durationHours = (pOP.t[2:end] .- pOP.t[1:end-1]) ./ Hour(1)
+    sum(pOP.value.vec[dischargePeriods] .* durationHours[dischargePeriods])
 end
 
-function Base.getproperty(op::OperationHistory, sym::Symbol)
-    if sym == :data
-        return getfield(op, :data)
-    elseif sym == :t
-        return op.data.timestamps
-    else
-        return op.data[sym]
-    end
+charged_energy(op::TimeFrame) = begin
+    pOP = op[:powerKw]
+    chargePeriods = pOP.value.vec .< 0
+    durationHours = (pOP.t[2:end] .- pOP.t[1:end-1]) ./ Hour(1)
+    -sum(pOP.value.vec[chargePeriods] .* durationHours[chargePeriods])
 end
-
-start_time(op::OperationHistory) = op.t[1]
-end_time(op::OperationHistory) = op.t[end]
-power(op::OperationHistory) = VariableIntervalTimeSeries(op.t, op.powerKw)
-
-discharged_energy(op::OperationHistory) = begin
-    dischargePeriods = op.powerKw .> 0
-    durationHours = (op.t[2:end] .- op.t[1:end-1]) ./ Hour(1)
-    sum(op.powerKw[dischargePeriods] .* durationHours[dischargePeriods])
-end
-
-charged_energy(op::OperationHistory) = begin
-    chargePeriods = op.powerKw .< 0
-    durationHours = (op.t[2:end] .- op.t[1:end-1]) ./ Hour(1)
-    -sum(op.powerKw[chargePeriods] .* durationHours[chargePeriods])
-end
-
-Base.iterate(op::OperationHistory, index = 1) =
-    index > length(op.powerKw) || index + 1 > length(op.t) ? nothing :
-    ((op.t[index], op.t[index+1], op.powerKw[index]), index + 1)
-
-Base.eltype(::Type{OperationHistory}) = Tuple{DateTime,DateTime,Float64}
-Base.length(op::OperationHistory) = length(op.powerKw)
 
 mutable struct Progress
     progressPct::Float64
-    schedule::ScheduleHistory
-    operation::OperationHistory
+    schedule::TimeFrame
+    operation::TimeFrame
 end
 
 mutable struct InvalidInput <: Exception

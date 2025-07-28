@@ -13,7 +13,11 @@ using Test
 
 function run_controller(ess, controller, schedulePeriod, useCases, tStart)
     t = tStart
-    opHist = CtrlEvalEngine.OperationHistory([t], Float64[], Float64[SOC(ess)], [SOH(ess)])
+    opHist = TimeFrame(
+        [t],
+        [PeriodSeries{Float64}(), PointSeries([SOC(ess)]), PointSeries([SOH(ess)])],
+        [:powerKw, :SOC, :SOH],
+    )
     schedulePeriodEnd = min(end_time(schedulePeriod), tStart + Hour(1))
     spProgress = VariableIntervalTimeSeries([tStart], Float64[])
     while t < schedulePeriodEnd

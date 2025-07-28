@@ -51,8 +51,8 @@ GenerationFollowing(input::Dict, tStart::DateTime, tEnd::DateTime) = GenerationF
 use_case_name(ucGF::GenerationFollowing) = "Generation Following"
 
 function calculate_metrics(
-    sh::ScheduleHistory,
-    operation::OperationHistory,
+    sh::TimeFrame,
+    operation::TimeFrame,
     ucGF::GenerationFollowing,
 )
     tsNetGen = ucGF.realtimePower + power(operation)
@@ -68,8 +68,8 @@ function calculate_metrics(
 end
 
 function use_case_charts(
-    sh::ScheduleHistory,
-    operation::OperationHistory,
+    sh::TimeFrame,
+    operation::TimeFrame,
     ucGF::GenerationFollowing,
 )
     tsScheduledNetGen = ucGF.forecastPower + power(sh)

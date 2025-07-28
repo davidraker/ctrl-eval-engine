@@ -68,9 +68,9 @@ get_use_cases(inputDict::Dict, setting::SimSetting) = [
 calculate_net_benefit(::Progress, ::UseCase) = 0.0
 
 # Return an empty vector if a use-case-specific method is not implemented
-calculate_metrics(::ScheduleHistory, ::OperationHistory, ::UseCase) = []
+calculate_metrics(::TimeFrame, ::TimeFrame, ::UseCase) = []
 
 # Return an empty vector if a use-case-specific method is not implemented
-use_case_charts(::ScheduleHistory, ::OperationHistory, ::UseCase) = []
+use_case_charts(::TimeFrame, ::TimeFrame, ::UseCase) = []
 
 end

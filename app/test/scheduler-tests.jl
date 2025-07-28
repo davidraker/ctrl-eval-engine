@@ -1,4 +1,4 @@
-
+using CtrlEvalEngine: ScheduleHistory, OperationHistory
 using CtrlEvalEngine.EnergyStorageSimulators:
     LiIonBattery, LFP_LiIonBatterySpecs, LiIonBatteryStates, p_max
 using CtrlEvalEngine.EnergyStorageUseCases:
@@ -17,8 +17,16 @@ t = now()
 
 progress = Progress(
     5.0,
-    ScheduleHistory([t], Float64[], Float64[0.5], Float64[]),
-    OperationHistory([t], Float64[], Float64[0.5], Float64[1.0]),
+    TimeFrame(
+        [t],
+        [PeriodSeries{Float64}([]), PointSeries([0.5]), PeriodSeries{Float64}([])],
+        [:powerKw, :SOC, :regCapKw],
+    ),
+    TimeFrame(
+        [t],
+        [PeriodSeries{Float64}([]), PointSeries([0.5]), PointSeries([1.0])],
+        [:powerKw, :SOC, :SOH],
+    ),
 )
 
 @testset "Manual Scheduler" begin

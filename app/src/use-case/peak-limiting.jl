@@ -23,8 +23,8 @@ PeakLimiting(input::Dict) = PeakLimiting(
 use_case_name(ucPL::PeakLimiting) = "Peak Limiting"
 
 function calculate_metrics(
-    ::ScheduleHistory,
-    operation::OperationHistory,
+    ::TimeFrame,
+    operation::TimeFrame,
     ucLF::PeakLimiting,
 )
     [
@@ -34,7 +34,7 @@ function calculate_metrics(
     ]
 end
 
-function use_case_charts(::ScheduleHistory, operation::OperationHistory, ucLF::PeakLimiting)
+function use_case_charts(::TimeFrame, operation::TimeFrame, ucLF::PeakLimiting)
     [
         # TODO: this is an example to be replaced
         Dict(

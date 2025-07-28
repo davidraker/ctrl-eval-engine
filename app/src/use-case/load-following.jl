@@ -67,8 +67,8 @@ LoadFollowing(input::Dict, tStart::DateTime, tEnd::DateTime) = LoadFollowing(
 use_case_name(ucLF::LoadFollowing) = "Load Following"
 
 function calculate_metrics(
-    sh::ScheduleHistory,
-    operation::OperationHistory,
+    sh::TimeFrame,
+    operation::TimeFrame,
     ucLF::LoadFollowing,
 )
     tsNetLoad = ucLF.realtimeLoadPower - power(operation)
@@ -84,8 +84,8 @@ function calculate_metrics(
 end
 
 function use_case_charts(
-    sh::ScheduleHistory,
-    operation::OperationHistory,
+    sh::TimeFrame,
+    operation::TimeFrame,
     ucLF::LoadFollowing,
 )
     tsScheduledNetLoad = ucLF.forecastLoadPower - power(sh)
