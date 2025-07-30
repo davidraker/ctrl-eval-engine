@@ -140,10 +140,11 @@ function update_operation_history!(
     ess::EnergyStorageSystem,
     powerKw::Real,
 )
-    push!(opHistory[:powerKw].value.vec, powerKw)
-    push!(opHistory[:SOC].value.vec, SOC(ess))
-    push!(opHistory[:SOH].value.vec, SOH(ess))
-    push!(opHistory.t, t)
+    add_data_point!(
+        opHistory,
+        t,
+        Dict(:powerKw => powerKw, :SOC => SOC(ess), :SOH => SOH(ess)),
+    )
 end
 
 function update_schedule_history!(
@@ -151,15 +152,14 @@ function update_schedule_history!(
     currentSchedule::EnergyStorageScheduling.Schedule,
 )
     for schedulePeriod in currentSchedule
-        push!(scheduleHistory.t, end_time(schedulePeriod))
-        push!(
-            scheduleHistory.powerKw,
-            EnergyStorageScheduling.average_power(schedulePeriod),
-        )
-        push!(scheduleHistory.SOC, EnergyStorageScheduling.ending_soc(schedulePeriod))
-        push!(
-            scheduleHistory.regCapKw,
-            EnergyStorageScheduling.regulation_capacity(schedulePeriod),
+        add_data_point!(
+            scheduleHistory,
+            end_time(schedulePeriod),
+            Dict(
+                :powerKw => EnergyStorageScheduling.average_power(schedulePeriod),
+                :SOC => EnergyStorageScheduling.ending_soc(schedulePeriod),
+                :regCapKw => EnergyStorageScheduling.regulation_capacity(schedulePeriod),
+            ),
         )
     end
 end
@@ -188,27 +188,27 @@ function generate_chart_data(progress::Progress, useCases)
             :data => [
                 Dict(
                     :x => progress.schedule.t,
-                    :y => progress.schedule.powerKw,
+                    :y => column_data(progress.schedule, :powerKw),
                     :type => "interval",
                     :name => "Scheduled Power",
                 ),
                 Dict(
                     :x => progress.operation.t,
-                    :y => progress.operation.powerKw,
+                    :y => column_data(progress.operation, :powerKw),
                     :type => "interval",
                     :line => Dict(:dash => :dot),
                     :name => "Actual Power",
                 ),
                 Dict(
                     :x => progress.schedule.t,
-                    :y => progress.schedule.SOC,
+                    :y => column_data(progress.schedule, :SOC),
                     :type => "instance",
                     :name => "Scheduled SOC",
                     :yAxis => "right",
                 ),
                 Dict(
                     :x => progress.operation.t,
-                    :y => progress.operation.SOC,
+                    :y => column_data(progress.operation, :SOC),
                     :type => "instance",
                     :line => Dict(:dash => :dot),
                     :name => "Actual SOC",
@@ -217,7 +217,8 @@ function generate_chart_data(progress::Progress, useCases)
             ],
         ),
     ]
-    if progress.operation.SOH[1] - progress.operation.SOH[end] > 0.01
+    soh_data = column_data(progress.operation, :SOH)
+    if soh_data[1] - soh_data[end] > 0.01
         push!(
             defaultCharts,
             Dict(
@@ -228,7 +229,7 @@ function generate_chart_data(progress::Progress, useCases)
                 :data => [
                     Dict(
                         :x => progress.operation.t,
-                        :y => progress.operation.SOH,
+                        :y => soh_data,
                         :type => "instance",
                         :name => "ESS State of Health",
                     ),

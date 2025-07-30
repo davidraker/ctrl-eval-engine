@@ -13,7 +13,6 @@ export get_scheduler,
     Schedule,
     SchedulePeriod,
     SchedulePeriodProgress,
-    duration,
     average_power,
     ending_soc,
     regulation_capacity,
@@ -61,7 +60,7 @@ SchedulePeriod(
     socEnd::Float64 = 0.0,
 ) = SchedulePeriod(p, tStart, duration, socStart, socEnd, 0.0)
 
-duration(sp::SchedulePeriod) = sp.duration
+CtrlEvalEngine.duration(sp::SchedulePeriod) = sp.duration
 CtrlEvalEngine.start_time(sp::SchedulePeriod) = sp.tStart
 CtrlEvalEngine.end_time(sp::SchedulePeriod) = sp.tStart + sp.duration
 average_power(sp::SchedulePeriod) = sp.powerKw

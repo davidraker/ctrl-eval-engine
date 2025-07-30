@@ -1,13 +1,29 @@
 using Dates
 using LinearAlgebra
 
-abstract type TimeSeries{V} end
-
 abstract type Series{V} end
 
 Base.iterate(s::Series, index = 1) = index > length(s) ? nothing : (s[index], index + 1)
 
 Base.getindex(s::Series, indices::AbstractVector{<:Real}) = [s[i] for i in indices]
+Base.push!(s::Series{V}, v::V) where {V} = push!(s.vec, v)
+
+# Common accessor functions for Series types
+"""
+    raw_vector(s::Series)
+
+Get the raw values vector from a Series.
+Useful for direct data access and I/O operations.
+"""
+raw_vector(s::Series) = s.vec
+
+"""
+    raw_vector(s::Series, ::Type{T}) where T
+
+Get the raw values vector converted to type T.
+"""
+raw_vector(s::Series, ::Type{T}) where T = T.(raw_vector(s))
+
 
 struct PeriodSeries{V} <: Series{V}
     vec::Vector{V}
@@ -88,10 +104,56 @@ upsample(s::PointSeries, n::Integer) = begin
     )
 end
 
-include("time-frame/VariableIntervalTimeSeries.jl")
-include("time-frame/FixedIntervalTimeSeries.jl")
-include("time-frame/RepeatedTimeSeries.jl")
-include("time-frame/TimeFrame.jl")
+abstract type TimeSeries{V} end
+
+
+# Common accessor functions for TimeSeries types
+"""
+    raw_vector(ts::TimeSeries)
+
+Get the raw values vector from a TimeSeries.
+Useful for direct data access and I/O operations.
+"""
+raw_vector(ts::TimeSeries) = raw_vector(ts.value)
+
+"""
+    raw_vector(ts::TimeSeries, ::Type{T}) where T
+
+Get the raw values vector converted to type T.
+"""
+raw_vector(ts::TimeSeries, ::Type{T}) where T = T.(raw_vector(ts))
+
+"""
+    duration(ts::TimeSeries)
+
+Get the total duration of the time series.
+"""
+duration(ts::TimeSeries) = end_time(ts) - start_time(ts)
+
+"""
+    time_intervals(ts::TimeSeries)
+
+Get the duration of each time interval in the series.
+Requires the TimeSeries to have a timestamps method.
+"""
+time_intervals(ts::TimeSeries) = diff(timestamps(ts))
+
+"""
+    add_point!(ts::TimeSeries{V}, timestamp::DateTime, value::V) where V
+
+Add a new data point to the time series.
+The value type must match the underlying series element type V.
+This is a generic implementation that works for any TimeSeries subtype
+that has a .t field for timestamps and a .value field with a .vec property.
+"""
+function add_point!(ts::TimeSeries{V}, timestamp::DateTime, value::V) where V
+    if timestamp <= ts.t[end]
+        error("New timestamp must be after the last timestamp")
+    end
+    push!(ts.value, value)
+    push!(ts.t, timestamp)
+    return ts
+end
 
 get_values(ts::TimeSeries) = ts.value
 
@@ -255,6 +317,13 @@ std(ts::TimeSeries) = begin
     diff = ts - mean(ts)
     sqrt(mean(diff^2))
 end
+
+
+include("time-frame/VariableIntervalTimeSeries.jl")
+include("time-frame/FixedIntervalTimeSeries.jl")
+include("time-frame/RepeatedTimeSeries.jl")
+include("time-frame/TimeFrame.jl")
+
 
 struct SimSetting
     simStart::Dates.DateTime
