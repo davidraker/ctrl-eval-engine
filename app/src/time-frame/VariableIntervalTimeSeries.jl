@@ -6,7 +6,7 @@
 The value of time series is defined as `value[i]` during the `i`th time period (from `t[i]` to `t[i + 1]`),
 where `1 ≤ i ≤ length(value)` and `length(t) == length(value) + 1`.
 """
-struct VariableIntervalTimeSeries{V,ST<:Series{V}} <: TimeSeries{V}
+struct VariableIntervalTimeSeries{V,ST<:Series{V}} <: TimeSeries{V, ST}
     t::Vector{Dates.DateTime}
     value::ST
     VariableIntervalTimeSeries(t::AbstractVector{Dates.DateTime}, v::ST) where {V,ST<:Series{V}} =

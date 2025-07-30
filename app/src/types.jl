@@ -104,7 +104,7 @@ upsample(s::PointSeries, n::Integer) = begin
     )
 end
 
-abstract type TimeSeries{V} end
+abstract type TimeSeries{V, ST <: Series{V}} end
 
 
 # Common accessor functions for TimeSeries types
@@ -139,14 +139,14 @@ Requires the TimeSeries to have a timestamps method.
 time_intervals(ts::TimeSeries) = diff(timestamps(ts))
 
 """
-    add_point!(ts::TimeSeries{V}, timestamp::DateTime, value::V) where V
+    add_point!(ts::TimeSeries{V,ST}, timestamp::DateTime, value::V) where {V, ST <: Series{V}}
 
 Add a new data point to the time series.
 The value type must match the underlying series element type V.
 This is a generic implementation that works for any TimeSeries subtype
 that has a .t field for timestamps and a .value field with a .vec property.
 """
-function add_point!(ts::TimeSeries{V}, timestamp::DateTime, value::V) where V
+function add_point!(ts::TimeSeries{V,ST}, timestamp::DateTime, value::V) where {V, ST <: Series{V}}
     if timestamp <= ts.t[end]
         error("New timestamp must be after the last timestamp")
     end
@@ -202,12 +202,12 @@ function binary_operation(ts1::TimeSeries, ts2::TimeSeries, op)
 end
 
 function binary_operation(
-    ts1::TimeSeries{V1},
-    ts2::TimeSeries{V2},
+    ts1::TimeSeries{V1, ST1},
+    ts2::TimeSeries{V2, ST2},
     op,
     tStart::DateTime,
     tEnd::DateTime,
-) where {V1,V2}
+) where {V1,V2, ST1 <: PeriodSeries{V1}, ST2 <: PeriodSeries{V2}}
     t = [tStart]
 
     ts1Idx = get_index(ts1, tStart)

@@ -1,20 +1,20 @@
 
-struct RepeatedTimeSeries{V} <: TimeSeries{V}
-    core::Union{FixedIntervalTimeSeries{<:Dates.Period,V},VariableIntervalTimeSeries{V}}
+struct RepeatedTimeSeries{V, ST <: Series{V}} <: TimeSeries{V, ST}
+    core::Union{FixedIntervalTimeSeries{<:Dates.Period,V,ST},VariableIntervalTimeSeries{V,ST}}
     iStart::Int
     startOffset::Dates.Period
     iEnd::Int
     endOffset::Dates.Period
     RepeatedTimeSeries(
         core::Union{
-            FixedIntervalTimeSeries{<:Dates.Period,V},
-            VariableIntervalTimeSeries{V},
+            FixedIntervalTimeSeries{<:Dates.Period,V,ST},
+            VariableIntervalTimeSeries{V,ST},
         },
         iStart::Integer,
         startOffset::Dates.Period,
         iEnd::Integer,
         endOffset::Dates.Period,
-    ) where {V} =
+    ) where {V, ST <: Series{V}} =
         if startOffset ≥ Dates.Second(0) && endOffset ≤ Dates.Second(0)
             _, firstCorePeriodStart, firstCorePeriodEnd =
                 get_period(core, mod1(iStart, length(core)))
@@ -22,7 +22,7 @@ struct RepeatedTimeSeries{V} <: TimeSeries{V}
                 get_period(core, mod1(iEnd, length(core)))
             if firstCorePeriodStart + startOffset < firstCorePeriodEnd &&
                lastCorePeriodEnd + endOffset ≥ lastCorePeriodStart
-                new{V}(core, iStart, startOffset, iEnd, endOffset)
+                new{V,ST}(core, iStart, startOffset, iEnd, endOffset)
             else
                 error("Start and end offsets must fall within the corresponding period")
             end

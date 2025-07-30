@@ -1,7 +1,7 @@
 # is_period(::PeriodTimeSeries) = true
 # is_period(::PointTimeSeries) = false
 
-struct FixedIntervalTimeSeries{R<:Dates.Period,V,ST<:Series{V}} <: TimeSeries{V}
+struct FixedIntervalTimeSeries{R<:Dates.Period,V,ST<:Series{V}} <: TimeSeries{V, ST}
     tStart::Dates.DateTime
     resolution::R
     value::ST
