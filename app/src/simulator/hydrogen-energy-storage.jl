@@ -92,6 +92,11 @@ function _operate!(
     return (; powerKw, SOC = SOC(hess))
 end
 
+initialize_extra_operations(hes::HydrogenEnergyStorageSystem) = (
+    [PointSeries([hes.states.lowPressureH2Kg + hes.states.mediumPressureH2Kg])],
+    [:StoredHydrogen],
+)
+
 function compute_charge_power(hess::HydrogenEnergyStorageSystem, powerKw, durationHour)
     h2Produced =
         (-powerKw * durationHour) / hess.specs.electrolyzerSpecs.electricityPowerKwhPerKg
