@@ -4,6 +4,7 @@ using JSON
 using Dates
 
 export evaluate_controller,
+    Series,
     PeriodSeries,
     PointSeries,
     TimeSeries,
