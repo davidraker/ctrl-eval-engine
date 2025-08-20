@@ -32,18 +32,23 @@ function Base.getindex(tf::TimeFrame, col::Symbol)
     return VariableIntervalTimeSeries(tf.t, tf.columns[idx])
 end
 
+Base.getindex(tf::TimeFrame, index::Integer, col::Symbol) = tf[col][index]
+
+
 """
     add_column!(tf::TimeFrame, header::Symbol, column::Series)
 
 Add a new column to an existing TimeFrame by modifying it in place.
-The column must have the correct length (length(timestamps) - 1).
+The column must have the correct length `length(timestamps) - 1`.
 
 # Arguments
-- `tf::TimeFrame`: The TimeFrame to modify
-- `header::Symbol`: The name/header for the new column
-- `column::Series`: The data for the new column
+
+  - `tf::TimeFrame`: The TimeFrame to modify
+  - `header::Symbol`: The name/header for the new column
+  - `column::Series`: The data for the new column
 
 # Example
+
 ```julia
 add_column!(tf, :newColumn, PeriodSeries([1.0, 2.0, 3.0]))
 ```
@@ -53,17 +58,17 @@ function add_column!(tf::TimeFrame, header::Symbol, column::Series)
     if header in tf.headers
         error("Column '$header' already exists in TimeFrame")
     end
-    
+
     # Check column length compatibility
-    expected_length = length(tf.t) - 1
-    if length(column) != expected_length
-        error("Incompatible column length. Expected $expected_length, got $(length(column))")
+    expectedLength = length(tf.t) - 1
+    if length(column) != expectedLength
+        error("Incompatible column length. Expected $expectedLength, got $(length(column))")
     end
-    
+
     # Add to existing vectors
     push!(tf.headers, header)
     push!(tf.columns, column)
-    
+
     return tf
 end
 
@@ -74,6 +79,7 @@ Add a new column to an existing TimeFrame using a vector of data.
 The data will be wrapped in a PeriodSeries automatically.
 
 # Example
+
 ```julia
 add_column!(tf, :newColumn, [1.0, 2.0, 3.0])
 ```
@@ -86,15 +92,17 @@ end
     add_column(tf::TimeFrame, header::Symbol, column::Series)
 
 Add a new column to an existing TimeFrame. Returns a new TimeFrame instance
-with the additional column. The column must have the correct length 
+with the additional column. The column must have the correct length
 (length(timestamps) - 1).
 
 # Arguments
-- `tf::TimeFrame`: The existing TimeFrame
-- `header::Symbol`: The name/header for the new column
-- `column::Series`: The data for the new column
+
+  - `tf::TimeFrame`: The existing TimeFrame
+  - `header::Symbol`: The name/header for the new column
+  - `column::Series`: The data for the new column
 
 # Example
+
 ```julia
 new_tf = add_column(tf, :newColumn, PeriodSeries([1.0, 2.0, 3.0]))
 ```
@@ -104,19 +112,51 @@ function add_column(tf::TimeFrame, header::Symbol, column::Series)
     if header in tf.headers
         error("Column '$header' already exists in TimeFrame")
     end
-    
+
     # Check column length compatibility
-    expected_length = length(tf.t) - 1
-    if length(column) != expected_length
-        error("Incompatible column length. Expected $expected_length, got $(length(column))")
+    expectedLength = length(tf.t) - 1
+    if length(column) != expectedLength
+        error("Incompatible column length. Expected $expectedLength, got $(length(column))")
     end
-    
+
     # Create new TimeFrame with the additional column
-    new_headers = [tf.headers..., header]
-    new_columns = [tf.columns..., column]
-    
-    return TimeFrame(tf.t, new_columns, new_headers)
+    newHeaders = [tf.headers..., header]
+    newColumns = [tf.columns..., column]
+
+    return TimeFrame(tf.t, newColumns, newHeaders)
 end
+
+timestamps(tf::TimeFrame) = tf.t
+
+start_time(tf::TimeFrame) = timestamps(tf)[1]
+end_time(tf::TimeFrame) = timestamps(tf)[end]
+
+# General type to represent a single row/period in a TimeFrame
+struct TimeFrameRow
+    tfRef::TimeFrame
+    iRow::Int
+end
+
+duration(tfr::TimeFrameRow) = tfr.tfRef.t[tfr.iRow+1] - tfr.tfRef.t[tfr.iRow]
+start_time(tfr::TimeFrameRow) = tfr.tfRef.t[tfr.iRow]
+end_time(tfr::TimeFrameRow) = tfr.tfRef.t[tfr.iRow+1]
+
+Base.getindex(tfr::TimeFrameRow, col::Symbol) = tfr.tfRef[col][tfr.iRow]
+
+Base.haskey(tfr::TimeFrameRow, col::Symbol) = col ∈ tfr.tfRef.headers
+
+# Iterator for TimeFrame to produce TimeFrameRow objects
+function Base.iterate(tf::TimeFrame, index = 1)
+    if index > length(timestamps(tf)) - 1
+        return nothing
+    end
+
+    return (TimeFrameRow(tf, index), index + 1)
+end
+
+Base.eltype(::Type{TimeFrame}) = TimeFrameRow
+Base.length(tf::TimeFrame) = length(timestamps(tf)) - 1
+
 
 """
     add_column(tf::TimeFrame, header::Symbol, data::AbstractVector)
@@ -125,6 +165,7 @@ Add a new column to an existing TimeFrame using a vector of data.
 The data will be wrapped in a PeriodSeries automatically.
 
 # Example
+
 ```julia
 new_tf = add_column(tf, :newColumn, [1.0, 2.0, 3.0])
 ```
@@ -134,11 +175,6 @@ function add_column(tf::TimeFrame, header::Symbol, data::AbstractVector)
 end
 
 power(tf::TimeFrame) = tf[:powerKw]
-
-timestamps(tf::TimeFrame) = tf.t
-
-start_time(op::TimeFrame) = timestamps(op)[1]
-end_time(op::TimeFrame) = timestamps(op)[end]
 
 # Convenience accessors for common TimeFrame operations
 """
@@ -161,33 +197,36 @@ column_data(tf::TimeFrame, col::Symbol) = raw_vector(tf[col])
 
 Get the raw data vector for a specific column, converted to type T.
 """
-column_data(tf::TimeFrame, col::Symbol, ::Type{T}) where T = raw_vector(tf[col], T)
+column_data(tf::TimeFrame, col::Symbol, ::Type{T}) where {T} = raw_vector(tf[col], T)
 
 """
-    add_data_point!(tf::TimeFrame, timestamp::DateTime, data::Dict{Symbol, <:Any})
+    add_data_point!(tf::TimeFrame, timestamp::DateTime, data::NamedTuple)
 
 Add a new data point to all columns of a TimeFrame simultaneously.
-The data dictionary should contain values for all columns.
+The data NamedTuple should contain values for all columns.
 
 # Example
+
 ```julia
-add_data_point!(tf, DateTime(2023, 1, 1, 12, 0), Dict(:powerKw => 100.0, :SOC => 0.8))
+add_data_point!(tf, DateTime(2023, 1, 1, 12, 0), (powerKw = 100.0, SOC = 0.8))
 ```
 """
-function add_data_point!(tf::TimeFrame, timestamp::DateTime, data::Dict{Symbol, <:Any})
+function add_data_point!(tf::TimeFrame, timestamp::DateTime, data::NamedTuple)
     # Verify all columns are present
-    missing_cols = setdiff(tf.headers, keys(data))
-    if !isempty(missing_cols)
-        error("Missing data for columns: $missing_cols")
+    dataKeys = Set(keys(data))
+    headerKeys = Set(tf.headers)
+    missingCols = setdiff(headerKeys, dataKeys)
+    if !isempty(missingCols)
+        error("Missing data for columns: $missingCols")
     end
-    
+
     # Add data for each column
     for header in tf.headers
-        push!(raw_vector(tf[header]), data[header])
+        push!(raw_vector(tf[header]), getproperty(data, header))
     end
-    
+
     # Add timestamp
     push!(tf.t, timestamp)
-    
+
     return tf
 end

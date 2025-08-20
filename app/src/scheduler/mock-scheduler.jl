@@ -17,9 +17,9 @@ function schedule(ess, scheduler::MockScheduler, _, tStart::Dates.DateTime, ::Pr
         rand(scheduleLength) .*
         (p_max(ess, scheduler.interval) - p_min(ess, scheduler.interval)) .+
         p_min(ess, scheduler.interval),
-        tStart,
-        scheduler.resolution,
-        fill(SOC(ess), scheduleLength + 1),
+        tStart;
+        resolution = scheduler.resolution,
+        SOC = fill(SOC(ess), scheduleLength + 1),
     )
 
     sleep(scheduler.sleepSeconds)

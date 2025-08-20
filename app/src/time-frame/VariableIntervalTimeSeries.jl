@@ -40,7 +40,6 @@ timestamps(ts::VariableIntervalTimeSeries) = ts.t
 function get_values(ts::VariableIntervalTimeSeries, tStart::DateTime, tEnd::DateTime)
     t1 = max(tStart, start_time(ts))
     t2 = min(tEnd, end_time(ts))
-    ts.value
     if t1 < ts.t[end] && t2 ≥ ts.t[1]
         # some overlap time period
         idx1 = findfirst(ts.t .> t1) - 1

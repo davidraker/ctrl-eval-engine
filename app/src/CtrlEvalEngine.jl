@@ -13,10 +13,12 @@ export evaluate_controller,
     VariableIntervalPointTimeSeries,
     RepeatedTimeSeries,
     TimeFrame,
+    TimeFrameRow,
     timestamps,
     get_values,
     start_time,
     end_time,
+    duration,
     sample,
     upsample,
     integrate,
@@ -137,14 +139,9 @@ end
 function update_operation_history!(
     opHistory::TimeFrame,
     t::Dates.DateTime,
-    ess::EnergyStorageSystem,
-    powerKw::Real,
+    operatingPoint::NamedTuple,
 )
-    add_data_point!(
-        opHistory,
-        t,
-        Dict(:powerKw => powerKw, :SOC => SOC(ess), :SOH => SOH(ess)),
-    )
+    add_data_point!(opHistory, t, operatingPoint)
 end
 
 function update_schedule_history!(
@@ -155,10 +152,10 @@ function update_schedule_history!(
         add_data_point!(
             scheduleHistory,
             end_time(schedulePeriod),
-            Dict(
-                :powerKw => EnergyStorageScheduling.average_power(schedulePeriod),
-                :SOC => EnergyStorageScheduling.ending_soc(schedulePeriod),
-                :regCapKw => EnergyStorageScheduling.regulation_capacity(schedulePeriod),
+            (
+                powerKw = EnergyStorageScheduling.average_power(schedulePeriod),
+                SOC = EnergyStorageScheduling.ending_soc(schedulePeriod),
+                regCapKw = EnergyStorageScheduling.regulation_capacity(schedulePeriod),
             ),
         )
     end
@@ -269,8 +266,8 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
     t = setting.simStart
     progress = Progress(
         5.0,
-        ScheduleHistory([t], Float64[], Float64[SOC(ess)], Float64[]),
-        OperationHistory([t], Float64[], Float64[SOC(ess)], Float64[SOH(ess)]),
+        initialize_schedule_history(t, useCases),
+        initialize_operation_history(t, ess),
     )
     if debug
         @debug "Progress updated" t progress
@@ -279,11 +276,7 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
     end
     lastProgressUpdateTime = now()
 
-    outputProgress = Progress(
-        5.0,
-        ScheduleHistory([t], Float64[], Float64[SOC(ess)], Float64[]),
-        OperationHistory([t], Float64[], Float64[SOC(ess)], Float64[SOH(ess)]),
-    )
+    outputProgress = deepcopy(progress)
 
     while t < setting.simEnd
         currentSchedule =
@@ -297,7 +290,7 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
                     control(ess, rtController, schedulePeriod, useCases, t, spProgress)
                 for (powerSetpointKw, _, controlPeriodEnd) in controlSequence
                     controlDuration = controlPeriodEnd - t
-                    actualPowerKw = operate!(
+                    operatingPoint = operate!(
                         ess,
                         powerSetpointKw,
                         controlDuration,
@@ -305,16 +298,11 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
                     )
                     update_schedule_period_progress!(
                         spProgress,
-                        actualPowerKw,
+                        operatingPoint.powerKw,
                         controlDuration,
                     )
                     t += controlDuration
-                    update_operation_history!(
-                        outputProgress.operation,
-                        t,
-                        ess,
-                        actualPowerKw,
-                    )
+                    update_operation_history!(outputProgress.operation, t, operatingPoint)
                     if t > schedulePeriodEnd
                         break
                     end

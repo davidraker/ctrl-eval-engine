@@ -210,4 +210,7 @@ function _operate!(
         _ΔSOC(ess, max(pNorm, 0), min(pNorm, 0), durationHour, temperatureDegreeC)
     ess.states.SOC = min(max(ess.states.SOC, 0), 1)
     ess.states.d += Δd(SOC(ess), pNorm, ess.specs.D, durationHour)
+    return (; powerKw, SOC = SOC(ess), SOH = SOH(ess))
 end
+
+initialize_extra_operations(ess::LiIonBattery) = ([PointSeries([SOH(ess)])], [:SOH])

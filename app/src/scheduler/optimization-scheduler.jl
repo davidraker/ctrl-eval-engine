@@ -74,7 +74,12 @@ function schedule(
     end)
 
     # Build expression of power output to grid
-    pOutExp = mapreduce(uc -> power_output(scheduler, uc, tStart), .+, useCases; init = pBatt .+ pvp)
+    pOutExp = mapreduce(
+        uc -> power_output(scheduler, uc, tStart),
+        .+,
+        useCases;
+        init = pBatt .+ pvp,
+    )
 
     @constraints(
         m,
@@ -85,18 +90,23 @@ function schedule(
             # regulation up
             r_p .<= p_max(ess) .- pBatt
             r_p .+ spn .≤ p_max(ess) .- pBatt
-            eng[1:end-1] .- (scheduler.regulationReserve .* r_p .+ spn) ./ eta .* resolutionHrs .≥ e_min(ess)
+            eng[1:end-1] .-
+            (scheduler.regulationReserve .* r_p .+ spn) ./ eta .* resolutionHrs .≥
+            e_min(ess)
             # regulation down
             r_n .<= -p_min(ess) .+ pBatt
-            eng[1:end-1] .+ (scheduler.regulationReserve .* r_n .* eta) .* resolutionHrs .<= e_max(ess)
+            eng[1:end-1] .+ (scheduler.regulationReserve .* r_n .* eta) .* resolutionHrs .<=
+            e_max(ess)
             # regulation
             # energy state dynamics
-            eng[2:end] .== eng[1:end-1] .- (p_p ./ eta .- p_n .* eta .+ self_discharge_rate(ess) .* e_max(ess)) .* resolutionHrs
+            eng[2:end] .==
+            eng[1:end-1] .-
+            (p_p ./ eta .- p_n .* eta .+ self_discharge_rate(ess) .* e_max(ess)) .*
+            resolutionHrs
             # TODO: PV generation dump
             pvp .== 0
         end
     )
-
 
     if isnothing(scheduler.endSoc)
         @constraint(m, engy_final_condition, eng[end] == eng[1])
@@ -158,10 +168,10 @@ function schedule(
 
     currentSchedule = Schedule(
         sol_pBatt[1:scheduleLength],
-        tStart,
-        scheduler.resolution,
-        (sol_eng[1:scheduleLength+1] .- e_min(ess)) ./ (e_max(ess) - e_min(ess)),
-        sol_r_c[1:scheduleLength],
+        tStart;
+        resolution = scheduler.resolution,
+        SOC = (sol_eng[1:scheduleLength+1] .- e_min(ess)) ./ (e_max(ess) - e_min(ess)),
+        regCapKw = sol_r_c[1:scheduleLength],
     )
     @debug "Schedule updated" currentSchedule
     return currentSchedule

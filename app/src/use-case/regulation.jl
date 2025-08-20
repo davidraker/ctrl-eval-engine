@@ -106,6 +106,8 @@ function regulation_history(sh::TimeFrame, ucReg::Regulation)
     )
 end
 
+initialize_extra_schedules(::Regulation) = [(PeriodSeries{Float64}(), :regCapKw)]
+
 calculate_net_benefit(progress::Progress, ucReg::Regulation) = begin
     @debug "Calculating Regulation benefit" schedule = progress.schedule regHistory =
         regulation_history(progress.schedule, ucReg) regPriceLen = length(ucReg.price)
@@ -114,9 +116,7 @@ end
 
 function calculate_metrics(sh::TimeFrame, op::TimeFrame, ucReg::Regulation)
     regIncome = regulation_income(regulation_history(sh, ucReg), ucReg)
-    tsError =
-        ucReg.AGCSignalPu * sh[:regCapKw] -
-        (power(op) - power(sh))
+    tsError = ucReg.AGCSignalPu * sh[:regCapKw] - (power(op) - power(sh))
     rmse = round(sqrt(mean(tsError^2)); sigdigits = 2)
     return [
         Dict(:sectionTitle => "Frequency Regulation"),

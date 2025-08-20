@@ -24,14 +24,14 @@ function run_controller(ess, controller, schedulePeriod, useCases, tStart)
         controlSequence = control(ess, controller, schedulePeriod, useCases, t, spProgress)
         for (powerSetpointKw, _, controlPeriodEnd) in controlSequence
             controlDuration = controlPeriodEnd - t
-            actualPowerKw = operate!(ess, powerSetpointKw, controlDuration)
+            operatingPoint = operate!(ess, powerSetpointKw, controlDuration)
             CtrlEvalEngine.update_schedule_period_progress!(
                 spProgress,
-                actualPowerKw,
+                operatingPoint.powerKw,
                 controlDuration,
             )
             t += controlDuration
-            CtrlEvalEngine.update_operation_history!(opHist, t, ess, actualPowerKw)
+            CtrlEvalEngine.update_operation_history!(opHist, t, operatingPoint)
             if t > schedulePeriodEnd
                 break
             end

@@ -22,8 +22,7 @@ raw_vector(s::Series) = s.vec
 
 Get the raw values vector converted to type T.
 """
-raw_vector(s::Series, ::Type{T}) where T = T.(raw_vector(s))
-
+raw_vector(s::Series, ::Type{T}) where {T} = T.(raw_vector(s))
 
 struct PeriodSeries{V} <: Series{V}
     vec::Vector{V}
@@ -104,8 +103,31 @@ upsample(s::PointSeries, n::Integer) = begin
     )
 end
 
-abstract type TimeSeries{V, ST <: Series{V}} end
+abstract type TimeSeries{V,ST<:Series{V}} end
 
+"""
+    get_index(ts::TimeSeries, index::Integer)
+
+Return a tuple `(v, t1, t2)`, 
+where `t1` and `t2` are the beginning and the end, respectively, 
+of the time period defined by `index`,
+and `v` is the value of `ts` in time period. 
+
+The type of `v` depends on the underlying series of `ts`.
+"""
+Base.getindex(ts::TimeSeries, i::Integer) = get_period(ts, i)
+
+"""
+    get_index(ts::TimeSeries, t::Dates.DateTime)
+
+Return a tuple `(v, t1, t2)`, 
+where `t1` and `t2` are the beginning and the end, respectively,
+of the time period enclosing `t`, 
+and `v` is the value of `ts` in time period.
+
+The type of `v` depends on the underlying series of `ts`.
+"""
+Base.getindex(ts::TimeSeries, t::Dates.DateTime) = get_period(ts, t)
 
 # Common accessor functions for TimeSeries types
 """
@@ -121,7 +143,7 @@ raw_vector(ts::TimeSeries) = raw_vector(ts.value)
 
 Get the raw values vector converted to type T.
 """
-raw_vector(ts::TimeSeries, ::Type{T}) where T = T.(raw_vector(ts))
+raw_vector(ts::TimeSeries, ::Type{T}) where {T} = T.(raw_vector(ts))
 
 """
     duration(ts::TimeSeries)
@@ -146,7 +168,11 @@ The value type must match the underlying series element type V.
 This is a generic implementation that works for any TimeSeries subtype
 that has a .t field for timestamps and a .value field with a .vec property.
 """
-function add_point!(ts::TimeSeries{V,ST}, timestamp::DateTime, value::V) where {V, ST <: Series{V}}
+function add_point!(
+    ts::TimeSeries{V,ST},
+    timestamp::DateTime,
+    value::V,
+) where {V,ST<:Series{V}}
     if timestamp <= ts.t[end]
         error("New timestamp must be after the last timestamp")
     end
@@ -202,12 +228,12 @@ function binary_operation(ts1::TimeSeries, ts2::TimeSeries, op)
 end
 
 function binary_operation(
-    ts1::TimeSeries{V1, ST1},
-    ts2::TimeSeries{V2, ST2},
+    ts1::TimeSeries{V1,ST1},
+    ts2::TimeSeries{V2,ST2},
     op,
     tStart::DateTime,
     tEnd::DateTime,
-) where {V1,V2, ST1 <: PeriodSeries{V1}, ST2 <: PeriodSeries{V2}}
+) where {V1,V2,ST1<:PeriodSeries{V1},ST2<:PeriodSeries{V2}}
     t = [tStart]
 
     ts1Idx = get_index(ts1, tStart)
@@ -318,12 +344,10 @@ std(ts::TimeSeries) = begin
     sqrt(mean(diff^2))
 end
 
-
 include("time-frame/VariableIntervalTimeSeries.jl")
 include("time-frame/FixedIntervalTimeSeries.jl")
 include("time-frame/RepeatedTimeSeries.jl")
 include("time-frame/TimeFrame.jl")
-
 
 struct SimSetting
     simStart::Dates.DateTime

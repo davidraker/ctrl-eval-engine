@@ -15,10 +15,9 @@ function schedule(ess, scheduler::ManualScheduler, _, tStart::Dates.DateTime, ::
             min.(scheduler.powerKw, p_max(ess, scheduler.resolution)),
             p_min(ess, scheduler.resolution),
         ),
-        tStart,
-        Second(scheduler.resolution),
-        fill(SOC(ess), length(scheduler.powerKw) + 1),
-        zeros(length(scheduler.powerKw))
+        tStart;
+        resolution = Second(scheduler.resolution),
+        SOC = fill(SOC(ess), length(scheduler.powerKw) + 1),
     )
     return currentSchedule
 end
