@@ -40,6 +40,8 @@ Base.lastindex(s::PeriodSeries) = lastindex(s.vec)
 Base.length(s::PeriodSeries{V}) where {V} = length(s.vec)
 Base.eltype(::Type{PeriodSeries{V}}) where {V} = V
 
+Base.append!(s1::PeriodSeries{V}, s2::PeriodSeries{V}) where {V} = append!(s1.vec, s2.vec)
+
 extract(s::PeriodSeries, i1::Real, i2::Real) = begin
     idx1 = div(i1, 1.0)
     idx2, rem2 = divrem(i2, 1.0)
@@ -84,6 +86,13 @@ Base.lastindex(s::PointSeries) = lastindex(s.vec) - 1
 Base.length(s::PointSeries) = length(s.vec) ≥ 2 ? length(s.vec) - 1 : 0
 Base.eltype(::Type{PointSeries{V}}) where {V} = Tuple{V,V}
 
+Base.append!(s1::PointSeries{V}, s2::PointSeries{V}) where {V} = begin
+    if s1.vec[end] != s2.vec[1]
+        s1.vec[end] = (s1.vec[end] + s2.vec[1]) / 2
+    end
+    append!(s1.vec, s2.vec[2:end])
+end
+
 extract(s::PointSeries, i1::Real, i2::Real) = begin
     idx1 = div(i1, 1.0)
     idx2, rem2 = divrem(i2, 1.0)
@@ -108,10 +117,10 @@ abstract type TimeSeries{V,ST<:Series{V}} end
 """
     get_index(ts::TimeSeries, index::Integer)
 
-Return a tuple `(v, t1, t2)`, 
-where `t1` and `t2` are the beginning and the end, respectively, 
+Return a tuple `(v, t1, t2)`,
+where `t1` and `t2` are the beginning and the end, respectively,
 of the time period defined by `index`,
-and `v` is the value of `ts` in time period. 
+and `v` is the value of `ts` in time period.
 
 The type of `v` depends on the underlying series of `ts`.
 """
@@ -120,9 +129,9 @@ Base.getindex(ts::TimeSeries, i::Integer) = get_period(ts, i)
 """
     get_index(ts::TimeSeries, t::Dates.DateTime)
 
-Return a tuple `(v, t1, t2)`, 
+Return a tuple `(v, t1, t2)`,
 where `t1` and `t2` are the beginning and the end, respectively,
-of the time period enclosing `t`, 
+of the time period enclosing `t`,
 and `v` is the value of `ts` in time period.
 
 The type of `v` depends on the underlying series of `ts`.

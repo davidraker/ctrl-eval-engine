@@ -37,7 +37,7 @@ end_time(ts::VariableIntervalTimeSeries) = ts.t[end]
 
 timestamps(ts::VariableIntervalTimeSeries) = ts.t
 
-function get_values(ts::VariableIntervalTimeSeries, tStart::DateTime, tEnd::DateTime)
+function get_values(ts::VariableIntervalTimeSeries{V,ST}, tStart::DateTime, tEnd::DateTime) where {V,ST<:Series{V}}
     t1 = max(tStart, start_time(ts))
     t2 = min(tEnd, end_time(ts))
     if t1 < ts.t[end] && t2 ≥ ts.t[1]
@@ -46,7 +46,7 @@ function get_values(ts::VariableIntervalTimeSeries, tStart::DateTime, tEnd::Date
         idx2 = findfirst(ts.t .≥ t2) - 1
         ts.value[idx1:idx2]
     else
-        eltype(ts.value)[]
+        ST()
     end
 end
 

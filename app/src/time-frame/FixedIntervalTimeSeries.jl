@@ -1,7 +1,7 @@
 # is_period(::PeriodTimeSeries) = true
 # is_period(::PointTimeSeries) = false
 
-struct FixedIntervalTimeSeries{R<:Dates.Period,V,ST<:Series{V}} <: TimeSeries{V, ST}
+struct FixedIntervalTimeSeries{R<:Dates.Period,V,ST<:Series{V}} <: TimeSeries{V,ST}
     tStart::Dates.DateTime
     resolution::R
     value::ST
@@ -12,8 +12,11 @@ end
 
 Create a fixed interval time series of the period type by default when constructor with an AbstractVector `v`.
 """
-FixedIntervalTimeSeries(tStart::Dates.DateTime, resolution::Dates.Period, v::AbstractVector) =
-    FixedIntervalTimeSeries(tStart, resolution, PeriodSeries(v))
+FixedIntervalTimeSeries(
+    tStart::Dates.DateTime,
+    resolution::Dates.Period,
+    v::AbstractVector,
+) = FixedIntervalTimeSeries(tStart, resolution, PeriodSeries(v))
 
 VariableIntervalTimeSeries(ts::FixedIntervalTimeSeries) =
     VariableIntervalTimeSeries(timestamps(ts), ts.value)
@@ -49,7 +52,11 @@ end_time(ts::FixedIntervalTimeSeries) = ts.tStart + ts.resolution * length(ts)
 timestamps(ts::FixedIntervalTimeSeries) =
     range(ts.tStart; step = ts.resolution, length = length(ts) + 1)
 
-function get_values(ts::FixedIntervalTimeSeries, tStart::DateTime, tEnd::DateTime)
+function get_values(
+    ts::FixedIntervalTimeSeries{R,V,ST},
+    tStart::DateTime,
+    tEnd::DateTime,
+) where {R<:Dates.Period,V,ST<:Series{V}}
     t1 = max(tStart, start_time(ts))
     t2 = min(tEnd, end_time(ts))
     if t1 < end_time(ts) && t2 ≥ start_time(ts)
@@ -58,14 +65,15 @@ function get_values(ts::FixedIntervalTimeSeries, tStart::DateTime, tEnd::DateTim
         idx2 = ceil(Int, (t2 - ts.tStart) / ts.resolution)
         ts.value[idx1:idx2]
     else
-        eltype(ts.value)[]
+        ST(V[])
     end
 end
 
 function extract(
     ts::FixedIntervalTimeSeries{<:Dates.Period,V,ST},
     tStart::DateTime,
-    tEnd::DateTime,
+    tEnd::DateTime;
+    extendToGrid::Bool = false,
 ) where {ST<:Series{V}} where {V}
     t1 = max(tStart, start_time(ts))
     t2 = min(tEnd, end_time(ts))
@@ -73,12 +81,12 @@ function extract(
         # some overlap time period
         idx1, rem1 = divrem(t1 - start_time(ts), ts.resolution)
         idx2, rem2 = divrem(t2 - start_time(ts), ts.resolution)
-        if Dates.value(rem1) === 0 && Dates.value(rem2) === 0
+        if Dates.value(rem1) === 0 && Dates.value(rem2) === 0 || extendToGrid
             # Both start and end are aligned with resolution
             FixedIntervalTimeSeries(
                 ts.tStart + ts.resolution * idx1,
                 ts.resolution,
-                ts.value[(idx1+1):idx2],
+                ts.value[(idx1+1):(Dates.value(rem2) === 0 ? idx2 : idx2 + 1)],
             )
         else
             VariableIntervalTimeSeries(

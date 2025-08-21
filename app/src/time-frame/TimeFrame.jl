@@ -34,7 +34,6 @@ end
 
 Base.getindex(tf::TimeFrame, index::Integer, col::Symbol) = tf[col][index]
 
-
 """
     add_column!(tf::TimeFrame, header::Symbol, column::Series)
 
@@ -157,7 +156,6 @@ end
 Base.eltype(::Type{TimeFrame}) = TimeFrameRow
 Base.length(tf::TimeFrame) = length(timestamps(tf)) - 1
 
-
 """
     add_column(tf::TimeFrame, header::Symbol, data::AbstractVector)
 
@@ -200,7 +198,7 @@ Get the raw data vector for a specific column, converted to type T.
 column_data(tf::TimeFrame, col::Symbol, ::Type{T}) where {T} = raw_vector(tf[col], T)
 
 """
-    add_data_point!(tf::TimeFrame, timestamp::DateTime, data::NamedTuple)
+    Base.push!(tf::TimeFrame, timestamp::DateTime, data::NamedTuple)
 
 Add a new data point to all columns of a TimeFrame simultaneously.
 The data NamedTuple should contain values for all columns.
@@ -208,10 +206,10 @@ The data NamedTuple should contain values for all columns.
 # Example
 
 ```julia
-add_data_point!(tf, DateTime(2023, 1, 1, 12, 0), (powerKw = 100.0, SOC = 0.8))
+push!(tf, DateTime(2023, 1, 1, 12, 0), (powerKw = 100.0, SOC = 0.8))
 ```
 """
-function add_data_point!(tf::TimeFrame, timestamp::DateTime, data::NamedTuple)
+function Base.push!(tf::TimeFrame, timestamp::DateTime, data::NamedTuple)
     # Verify all columns are present
     dataKeys = Set(keys(data))
     headerKeys = Set(tf.headers)
@@ -229,4 +227,51 @@ function add_data_point!(tf::TimeFrame, timestamp::DateTime, data::NamedTuple)
     push!(tf.t, timestamp)
 
     return tf
+end
+
+"""
+    Base.push!(tf::TimeFrame, tfr::TimeFrameRow)
+
+Append a TimeFrameRow to a TimeFrame. This adds the row's data and its end time as a new timestamp.
+
+# Example
+
+```julia
+push!(tf, timeFrameRow)
+```
+"""
+function Base.push!(tf::TimeFrame, tfr::TimeFrameRow)
+    # Create NamedTuple from TimeFrameRow data
+    data = NamedTuple{Tuple(tf.headers)}(Tuple(tfr[header] for header in tf.headers))
+    return push!(tf, end_time(tfr), data)
+end
+
+"""
+    Base.append!(tf1::TimeFrame, tf2::TimeFrame)
+
+Append all rows from tf2 to tf1. Both TimeFrames must have the same column headers.
+
+# Example
+
+```julia
+append!(tf1, tf2)
+```
+"""
+function Base.append!(tf1::TimeFrame, tf2::TimeFrame)
+    @assert tf1.t[end] == tf2.t[1] "TimeFrames must be contiguous"
+
+    # Check that headers match
+    if Set(tf1.headers) != Set(tf2.headers)
+        error("TimeFrames must have the same column headers to append")
+    end
+
+    # Append all data
+    for (iCol, header) in enumerate(tf1.headers)
+        append!(tf1.columns[iCol], tf2.columns[findfirst(tf2.headers .== header)])
+    end
+
+    # Append timestamps (skip the first timestamp of tf2 to avoid duplication)
+    append!(tf1.t, tf2.t[2:end])
+
+    return tf1
 end

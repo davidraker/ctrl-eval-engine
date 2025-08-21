@@ -142,24 +142,14 @@ function update_operation_history!(
     t::Dates.DateTime,
     operatingPoint::NamedTuple,
 )
-    add_data_point!(opHistory, t, operatingPoint)
+    push!(opHistory, t, operatingPoint)
 end
 
 function update_schedule_history!(
     scheduleHistory::TimeFrame,
     currentSchedule::EnergyStorageScheduling.Schedule,
 )
-    for schedulePeriod in currentSchedule
-        add_data_point!(
-            scheduleHistory,
-            end_time(schedulePeriod),
-            (
-                powerKw = EnergyStorageScheduling.average_power(schedulePeriod),
-                SOC = EnergyStorageScheduling.ending_soc(schedulePeriod),
-                regCapKw = EnergyStorageScheduling.regulation_capacity(schedulePeriod),
-            ),
-        )
-    end
+    append!(scheduleHistory, currentSchedule)
 end
 
 function update_schedule_period_progress!(

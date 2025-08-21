@@ -74,7 +74,8 @@ Regulation(input::Dict, tStart::DateTime, tEnd::DateTime) = begin
                 ]),
             ),
             tStart,
-            tEnd,
+            tEnd;
+            extendToGrid = true,
         ),
         input["data"]["performanceFactor"],
     )
