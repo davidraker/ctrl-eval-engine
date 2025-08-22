@@ -89,12 +89,16 @@ function _operate!(
 
     @debug "operating hess" powerKw hess.states
 
-    return (; powerKw, SOC = SOC(hess))
+    return (;
+        powerKw,
+        SOC = SOC(hess),
+        storedHydrogenKg = hess.states.lowPressureH2Kg + hess.states.mediumPressureH2Kg,
+    )
 end
 
 initialize_extra_operations(hes::HydrogenEnergyStorageSystem) = (
     [PointSeries([hes.states.lowPressureH2Kg + hes.states.mediumPressureH2Kg])],
-    [:StoredHydrogen],
+    [:storedHydrogenKg],
 )
 
 function compute_charge_power(hess::HydrogenEnergyStorageSystem, powerKw, durationHour)
