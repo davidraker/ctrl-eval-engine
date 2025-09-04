@@ -1,10 +1,13 @@
-
+using CtrlEvalEngine:
+    ScheduleHistory, OperationHistory, Progress, power, VariableIntervalTimeSeries
 using CtrlEvalEngine.EnergyStorageSimulators:
     LiIonBattery, LFP_LiIonBatterySpecs, LiIonBatteryStates, p_max
 using CtrlEvalEngine.EnergyStorageUseCases:
     UseCase, EnergyArbitrage, Regulation, RegulationPricePoint
 using CtrlEvalEngine.EnergyStorageScheduling:
     schedule,
+    EvolutionaryScheduler,
+    GeneticAlgorithm,
     OptScheduler,
     ManualScheduler,
     RLScheduler,
@@ -130,4 +133,31 @@ end
     )]
     sRB = schedule(ess, ruleBasedScheduler, useCases, tStart, progress)
     @test length(sRB.powerKw) == 24
+end
+
+@testset "Genetic Algorithm Scheduler" begin
+    tStart = floor(now(), Hour(1))
+    ess = LiIonBattery(
+        LFP_LiIonBatterySpecs(500, 1000, 0.85, 2000),
+        LiIonBatteryStates(0.5, 0),
+    )
+    useCases = UseCase[EnergyArbitrage(
+        VariableIntervalTimeSeries(
+            range(tStart; step = Hour(6), length = 6),
+            [10, 20, 1, 10, 5],
+        ),
+    )]
+    scheduler = EvolutionaryScheduler(Hour(1), Hour(5), GeneticAlgorithm(
+        100,        # populationSize::Int  # The size of the population
+        0.8,        # crossoverRate::Float64 # The fraction of the population at the next generation, not including elite children, that is created by the crossover function.
+        0.1,        # mutationRate:: Float64 # Probability of chromosome to be mutated
+        0.0,        # ɛ::Integer # Positive integer specifies how many individuals in the current generation are guaranteed to survive to the next generation. Floating number specifies fraction of population.
+        ("tournament", (2,)),   # selection::String # Selection function (default: tournament)
+        "genop",       # crossover::String # Crossover function (default: genop)
+        "genop",    # mutation::String # Mutation function (default: genop)
+        [("AbsDiff", (1e-12,))]  # metrics::Vector{String}  # A collection of convergence metrics.
+    ))
+    println(scheduler)
+    sched = schedule(ess, scheduler, useCases, floor(now(), Hour(1)))
+    @test sched.powerKw <= [-433.86091563731236, -0.0, 500.0, -0.0, -500.0]  # TODO: removed sum() from second vector. Is this the right test now?
 end

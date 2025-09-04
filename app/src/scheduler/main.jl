@@ -88,9 +88,10 @@ Base.length(s::Schedule) = length(s.powerKw)
 using ..CtrlEvalEngine.EnergyStorageSimulators
 using ..CtrlEvalEngine.EnergyStorageUseCases
 
+include("evolutionary-scheduler.jl")
+include("manual-scheduler.jl")
 include("mock-scheduler.jl")
 include("optimization-scheduler.jl")
-include("manual-scheduler.jl")
 include("RL-scheduler.jl")
 include("rule-based.jl")
 include("time-of-use.jl")
