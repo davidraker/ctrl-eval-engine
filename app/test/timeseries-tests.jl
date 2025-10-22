@@ -36,9 +36,9 @@ using LinearAlgebra
         @test s1[0.0] ≈ 0.0
         @test s1[0:0.5:2] == 0:0.5:2
 
-        s2 = extract(s1, 1.3, 2.7)
+        s2 = extract(s1, 0.3, 2.7)
         @test s2 isa PointSeries
-        @test s2.vec == [1.3, 2, 2.7]
+        @test s2.vec == [0.3, 1, 2, 2.7]
 
         s3 = extract(s1, 1.3, 3)
         @test s3 isa PointSeries
@@ -289,7 +289,7 @@ end
         @test get_values(tsProd).vec == [0, 4, 6, 9, 15, 0]
     end
 
-    @testset "Integral Operations" begin
+    @testset "Period Series Integral & Mean" begin
         ts1 = VariableIntervalTimeSeries(
             [
                 DateTime(2023, 1, 1, 0, 20),
@@ -302,15 +302,42 @@ end
         @test integrate(ts1) ≈ 2 * 0.5 + 3 * 25 / 60 + 5 * 75 / 60
         @test integrate(ts1, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 5)) ≈
               3 * 15 / 60 + 5 * 75 / 60
-        @test mean(ts1) ≈ (2 * 30 + 3 * 25 + 5 * 75) / 130
+
+        m = (2 * 30 + 3 * 25 + 5 * 75) / 130
+        @test mean(ts1) ≈ m
         @test mean(ts1, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) ≈
               (3 * 15 + 5 * 75) / 120
         tsMean = mean(ts1, [DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)])
         @test tsMean isa VariableIntervalTimeSeries
         @test tsMean.value[1] ≈ (3 * 15 + 5 * 75) / 120
 
-        m = (2 * 30 + 3 * 25 + 5 * 75) / 130
         @test std(ts1) ≈ sqrt(((2 - m)^2 * 30 + (3 - m)^2 * 25 + (5 - m)^2 * 75) / 130)
+    end
+
+    @testset "Point Series Integral & Mean" begin
+        ts1 = VariableIntervalTimeSeries(
+            [
+                DateTime(2023, 1, 1, 0, 20),
+                DateTime(2023, 1, 1, 0, 50),
+                DateTime(2023, 1, 1, 1, 15),
+                DateTime(2023, 1, 1, 2, 30),
+            ],
+            PointSeries([0, 2, 3, 5]),
+        )
+        @test integrate(ts1) ≈ 1 * 0.5 + 2.5 * 25 / 60 + 4 * 75 / 60
+        @test integrate(ts1, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 5)) ≈
+              ((1 - 17.5 / 25) * 2 + 17.5 / 25 * 3) * 15 / 60 + 4 * 75 / 60
+
+        m = (1 * 30 + 2.5 * 25 + 4 * 75) / 130
+        @test mean(ts1) ≈ m
+        @test mean(ts1, DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)) ≈
+              (((1 - 17.5 / 25) * 2 + 17.5 / 25 * 3) * 15 + 4 * 75) / 120
+        tsMean = mean(ts1, [DateTime(2023, 1, 1, 1), DateTime(2023, 1, 1, 3)])
+        @test tsMean isa VariableIntervalTimeSeries
+        @test tsMean.value[1] ≈ (((1 - 17.5 / 25) * 2 + 17.5 / 25 * 3) * 15 + 4 * 75) / 120
+
+        # TODO: std for PointSeries is to be defined
+        @test_throws MethodError std(ts1)
     end
 end
 

@@ -6,10 +6,13 @@
 The value of time series is defined as `value[i]` during the `i`th time period (from `t[i]` to `t[i + 1]`),
 where `1 ≤ i ≤ length(value)` and `length(t) == length(value) + 1`.
 """
-struct VariableIntervalTimeSeries{V,ST<:Series{V}} <: TimeSeries{V, ST}
+struct VariableIntervalTimeSeries{V,ST<:Series{V}} <: TimeSeries{V,ST}
     t::Vector{Dates.DateTime}
     value::ST
-    VariableIntervalTimeSeries(t::AbstractVector{Dates.DateTime}, v::ST) where {V,ST<:Series{V}} =
+    VariableIntervalTimeSeries(
+        t::AbstractVector{Dates.DateTime},
+        v::ST,
+    ) where {V,ST<:Series{V}} =
         if length(t) == length(v) + 1
             new{V,ST}(t, v)
         else
@@ -37,7 +40,11 @@ end_time(ts::VariableIntervalTimeSeries) = ts.t[end]
 
 timestamps(ts::VariableIntervalTimeSeries) = ts.t
 
-function get_values(ts::VariableIntervalTimeSeries{V,ST}, tStart::DateTime, tEnd::DateTime) where {V,ST<:Series{V}}
+function get_values(
+    ts::VariableIntervalTimeSeries{V,ST},
+    tStart::DateTime,
+    tEnd::DateTime,
+) where {V,ST<:Series{V}}
     t1 = max(tStart, start_time(ts))
     t2 = min(tEnd, end_time(ts))
     if t1 < ts.t[end] && t2 ≥ ts.t[1]
@@ -57,7 +64,14 @@ function extract(ts::VariableIntervalTimeSeries, tStart::DateTime, tEnd::DateTim
         # some overlap time period
         idx1 = findfirst(ts.t .> t1) - 1
         idx2 = findfirst(ts.t .≥ t2) - 1
-        VariableIntervalTimeSeries([tStart, ts.t[idx1+1:idx2]..., t2], ts.value[idx1:idx2])
+        VariableIntervalTimeSeries(
+            [t1, ts.t[idx1+1:idx2]..., t2],
+            extract(
+                ts.value,
+                idx1 - 1 + (t1 - ts.t[idx1]) / (ts.t[idx1+1] - ts.t[idx1]),
+                idx2 - 1 + (t2 - ts.t[idx2]) / (ts.t[idx2+1] - ts.t[idx2]),
+            ),
+        )
     else
         VariableIntervalTimeSeries([tStart], [])
     end
@@ -104,7 +118,8 @@ get_index(ts::VariableIntervalTimeSeries, t::DateTime) = begin
     end
 end
 
-integrate(ts::VariableIntervalTimeSeries) = sum(ts.value .* (diff(ts.t) ./ Hour(1)))
+integrate(ts::VariableIntervalTimeSeries{V,ST}) where {V,ST<:PeriodSeries{V}} =
+    sum(ts.value .* (diff(ts.t) ./ Hour(1)))
 
 binary_operation(ts::VariableIntervalTimeSeries, x::Number, op) =
     VariableIntervalTimeSeries(ts.t, op.(ts.value, x))
@@ -114,5 +129,5 @@ binary_operation(x::Number, ts::VariableIntervalTimeSeries, op) =
 Base.:^(ts::VariableIntervalTimeSeries, x::Number) =
     VariableIntervalTimeSeries(ts.t, ts.value .^ x)
 
-mean(ts::VariableIntervalTimeSeries) =
+mean(ts::VariableIntervalTimeSeries{V,ST}) where {V,ST<:PeriodSeries{V}} =
     sum(diff(ts.t) ./ Hour(1) .* ts.value) / ((ts.t[end] - ts.t[1]) / Hour(1))
