@@ -10,8 +10,8 @@ using ..CtrlEvalEngine
 
 export get_scheduler,
     schedule,
-    Schedule,
-    SchedulePeriod,
+    create_schedule,
+    create_schedule_period,
     average_power,
     ending_soc,
     regulation_capacity,
@@ -20,11 +20,8 @@ export get_scheduler,
 
 abstract type Scheduler end
 
-const Schedule = TimeFrame
-const SchedulePeriod = TimeFrameRow
-
 # Constructor function to create a Schedule (TimeFrame) with standard columns
-function Schedule(
+function create_schedule(
     powerKw::Vector{Float64},
     tStart::Dates.DateTime;
     resolution::Dates.TimePeriod = Hour(1),
@@ -32,24 +29,22 @@ function Schedule(
     regCapKw::Union{Nothing,Vector{Float64}} = nothing,
 )
     timestamps = [tStart + resolution * i for i = 0:length(powerKw)]
-    regCap = isnothing(regCapKw) ? zeros(length(powerKw)) : regCapKw
-
-    return TimeFrame(
-        timestamps,
-        [PeriodSeries(powerKw), PointSeries(SOC), PeriodSeries(regCap)],
-        [:powerKw, :SOC, :regCapKw],
-    )
+    schSeries = [PeriodSeries(powerKw), PointSeries(SOC)]
+    schHeaders = [:powerKw, :SOC]
+    if !isnothing(regCapKw)
+        push!(schSeries, PeriodSeries(regCapKw))
+        push!(schHeaders, :regCapKw)
+    end
+    return TimeFrame(timestamps, schSeries, schHeaders)
 end
 
-SchedulePeriod(p, tStart::Dates.DateTime; duration::Dates.Period = Hour(1)) = TimeFrameRow(
-    TimeFrame([tStart, tStart + duration], [PeriodSeries([p])], [:powerKw]),
-    1,
-)
+create_schedule_period(p, tStart::Dates.DateTime; duration::Dates.Period = Hour(1)) =
+    TimeFrameRow(TimeFrame([tStart, tStart + duration], [PeriodSeries([p])], [:powerKw]), 1)
 
 # Helper functions for schedule-specific TimeFrameRow instances
-average_power(tfr::SchedulePeriod) = tfr[:powerKw][1]
-ending_soc(tfr::SchedulePeriod) = tfr[:SOC][1][2]
-regulation_capacity(tfr::SchedulePeriod) = haskey(tfr, :regCapKw) ? tfr[:regCapKw][1] : 0.0
+average_power(tfr::TimeFrameRow) = tfr[:powerKw][1]
+ending_soc(tfr::TimeFrameRow) = tfr[:SOC][1][2]
+regulation_capacity(tfr::TimeFrameRow) = haskey(tfr, :regCapKw) ? tfr[:regCapKw][1] : 0.0
 
 using ..CtrlEvalEngine.EnergyStorageSimulators
 using ..CtrlEvalEngine.EnergyStorageUseCases
@@ -72,7 +67,7 @@ schedule(
     _,
     tStart::Dates.DateTime,
     ::Progress,
-) = Schedule([0.0], tStart; resolution = scheduler.interval, SOC = [SOC(ess), SOC(ess)])
+) = create_schedule([0.0], tStart; resolution = scheduler.interval, SOC = [SOC(ess), SOC(ess)])
 
 """
     get_scheduler(inputDict::Dict)

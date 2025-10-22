@@ -4,7 +4,7 @@ using CtrlEvalEngine.EnergyStorageSimulators:
 using CtrlEvalEngine.EnergyStorageUseCases
 using CtrlEvalEngine.EnergyStorageUseCases: RegulationPricePoint
 
-using CtrlEvalEngine.EnergyStorageScheduling: schedule, ManualScheduler, SchedulePeriod
+using CtrlEvalEngine.EnergyStorageScheduling: schedule, ManualScheduler, create_schedule_period
 using CtrlEvalEngine.EnergyStorageRTControl:
     control, PIDController, AMAController, RuleBasedController
 using Dates
@@ -54,14 +54,14 @@ tStart = floor(now(), Hour(1))
         ),
     )]
     controller = PIDController(Minute(1), 8.0, 0.5, 0.01)
-    schedulePeriod = SchedulePeriod(65.2, tStart; duration = Hour(1))
+    schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     @test true
 end
 
 @testset "PID Controller" begin
     controller = PIDController(Second(1), 0.5, 0.5, 0.9)
-    schedulePeriod = SchedulePeriod(65.2, tStart; duration = Hour(1))
+    schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
     lf = LoadFollowing(
         FixedIntervalTimeSeries(tStart, Minute(5), [10, 15, 1, 10]),
         FixedIntervalTimeSeries(tStart, Minute(5), [15, 10, 1, 10]),
@@ -101,7 +101,7 @@ end
         ),
     )]
     controller = RuleBasedController(1.5)
-    schedulePeriod = SchedulePeriod(65.2, tStart; duration = Minute(15))
+    schedulePeriod = create_schedule_period(65.2, tStart; duration = Minute(15))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     @test true
 end

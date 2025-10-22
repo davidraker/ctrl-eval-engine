@@ -13,6 +13,7 @@ export evaluate_controller,
     VariableIntervalPeriodTimeSeries,
     VariableIntervalPointTimeSeries,
     RepeatedTimeSeries,
+    raw_vector,
     TimeFrame,
     TimeFrameRow,
     timestamps,
@@ -147,7 +148,7 @@ end
 
 function update_schedule_history!(
     scheduleHistory::TimeFrame,
-    currentSchedule::EnergyStorageScheduling.Schedule,
+    currentSchedule::TimeFrame,
 )
     append!(scheduleHistory, currentSchedule)
 end

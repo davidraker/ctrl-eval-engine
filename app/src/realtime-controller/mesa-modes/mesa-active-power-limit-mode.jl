@@ -1,7 +1,7 @@
 using Dates
 using CtrlEvalEngine.EnergyStorageSimulators
 using CtrlEvalEngine.EnergyStorageUseCases: UseCase
-using CtrlEvalEngine.EnergyStorageScheduling: SchedulePeriod
+using CtrlEvalEngine.EnergyStorageScheduling: create_schedule_period
 
 # using .MesaEss
 

@@ -233,7 +233,7 @@ cum_integrate(
 ) where {V,ST<:PeriodSeries{V}} = begin
     seg_integral = [v * ((t2 - t1) / Hour(1)) for (v, t1, t2) in extract(ts, tStart, tEnd)]
 
-    VariableIntervalTimeSeries(timestamps(ts), cumsum(seg_integral))
+    VariableIntervalTimeSeries(timestamps(ts), PointSeries(vcat([0], cumsum(seg_integral))))
 end
 
 cum_integrate(ts::TimeSeries) = cum_integrate(ts, start_time(ts), end_time(ts))

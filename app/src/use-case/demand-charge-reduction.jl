@@ -182,7 +182,7 @@ use_case_charts(::TimeFrame, op::TimeFrame, ucDCR::DemandChargeReduction) =
 
         originalLoadTrace = Dict(
             :x => timestamps(ucDCR.loadForecastKw15min),
-            :y => get_values(ucDCR.loadForecastKw15min),
+            :y => raw_vector(ucDCR.loadForecastKw15min),
             :type => "interval",
             :name => "Native Load",
         )
@@ -191,7 +191,7 @@ use_case_charts(::TimeFrame, op::TimeFrame, ucDCR::DemandChargeReduction) =
 
         netLoadTrace = Dict(
             :x => timestamps(netLoad),
-            :y => get_values(netLoad),
+            :y => raw_vector(netLoad),
             :type => "interval",
             :name => "Net Load",
         )

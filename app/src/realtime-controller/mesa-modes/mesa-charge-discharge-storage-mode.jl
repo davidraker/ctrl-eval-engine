@@ -13,7 +13,7 @@ function modecontrol(
     mode::ChargeDischargeStorageMode,
     ess::EnergyStorageSystem,
     controller::MesaController,
-    schedulePeriod::SchedulePeriod,
+    schedulePeriod::TimeFrameRow,
     _,
     t::Dates.DateTime,
     _,

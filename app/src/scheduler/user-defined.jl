@@ -86,7 +86,7 @@ function schedule(
         error(scheduleDict["error"])
     end
 
-    return Schedule(
+    return create_schedule(
         float.(scheduleDict["power_kW"]),
         tStart;
         resolution = Second(floor(Int, 3600 * get(scheduleDict, "resolution_hr", 1))),

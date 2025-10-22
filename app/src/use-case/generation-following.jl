@@ -83,27 +83,27 @@ function use_case_charts(
             :data => [
                 Dict(
                     :x => timestamps(ucGF.forecastPower),
-                    :y => get_values(ucGF.forecastPower),
+                    :y => raw_vector(ucGF.forecastPower),
                     :type => "interval",
                     :name => "Forecast/Scheduled Generation",
                     :line => Dict(:dash => :dash),
                 ),
                 Dict(
                     :x => timestamps(tsScheduledNetGen),
-                    :y => get_values(tsScheduledNetGen),
+                    :y => raw_vector(tsScheduledNetGen),
                     :type => "interval",
                     :name => "Forecast/Scheduled Net Generation",
                     :line => Dict(:dash => :dash),
                 ),
                 Dict(
                     :x => timestamps(ucGF.realtimePower),
-                    :y => get_values(ucGF.realtimePower),
+                    :y => raw_vector(ucGF.realtimePower),
                     :type => "interval",
                     :name => "Real-time Generation",
                 ),
                 Dict(
                     :x => timestamps(tsRtNetGen),
-                    :y => get_values(tsRtNetGen),
+                    :y => raw_vector(tsRtNetGen),
                     :type => "interval",
                     :name => "Real-time Net Generation",
                 ),
@@ -116,7 +116,7 @@ function use_case_charts(
             :data => [
                 Dict(
                     :x => timestamps(tsRelError),
-                    :y => get_values(tsRelError),
+                    :y => raw_vector(tsRelError),
                     :type => "interval",
                     :name => "Relative Error",
                 ),

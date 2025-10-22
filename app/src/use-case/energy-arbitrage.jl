@@ -97,7 +97,7 @@ use_case_charts(sh::TimeFrame, op::TimeFrame, ucEA::EnergyArbitrage) = begin
         [
             Dict(
                 :x => timestamps(ucEA.actualPrice),
-                :y => get_values(ucEA.actualPrice),
+                :y => raw_vector(ucEA.actualPrice),
                 :type => "interval",
                 :name => "Energy Price",
                 :yAxis => "right",
@@ -107,14 +107,14 @@ use_case_charts(sh::TimeFrame, op::TimeFrame, ucEA::EnergyArbitrage) = begin
         [
             Dict(
                 :x => timestamps(ucEA.forecastPrice),
-                :y => get_values(ucEA.forecastPrice),
+                :y => raw_vector(ucEA.forecastPrice),
                 :type => "interval",
                 :name => "Forecast Energy Price",
                 :yAxis => "right",
             ),
             Dict(
                 :x => timestamps(ucEA.actualPrice),
-                :y => get_values(ucEA.actualPrice),
+                :y => raw_vector(ucEA.actualPrice),
                 :type => "interval",
                 :line => Dict(:dash => :dot),
                 :name => "Actual Energy Price",
@@ -132,14 +132,14 @@ use_case_charts(sh::TimeFrame, op::TimeFrame, ucEA::EnergyArbitrage) = begin
             :data => [
                 Dict(
                     :x => sh.t,
-                    :y => get_values(sh[:powerKw]).vec,
+                    :y => raw_vector(sh[:powerKw]),
                     :type => "interval",
                     :name => "Scheduled Power",
                     :line => Dict(:dash => :dash),
                 ),
                 Dict(
                     :x => op.t,
-                    :y => get_values(op[:powerKw]).vec,
+                    :y => raw_vector(op[:powerKw]),
                     :type => "interval",
                     :name => "Actual Power",
                 ),
@@ -153,7 +153,7 @@ use_case_charts(sh::TimeFrame, op::TimeFrame, ucEA::EnergyArbitrage) = begin
             :data => [
                 Dict(
                     :x => timestamps(cumIncome),
-                    :y => pushfirst!(get_values(cumIncome).vec, 0),
+                    :y => raw_vector(cumIncome),
                     :type => "instance",
                 ),
             ],

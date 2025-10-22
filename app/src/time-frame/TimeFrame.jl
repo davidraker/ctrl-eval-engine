@@ -260,9 +260,11 @@ append!(tf1, tf2)
 function Base.append!(tf1::TimeFrame, tf2::TimeFrame)
     @assert tf1.t[end] == tf2.t[1] "TimeFrames must be contiguous"
 
-    # Check that headers match
-    if Set(tf1.headers) != Set(tf2.headers)
-        error("TimeFrames must have the same column headers to append")
+    # Check that tf1.headers is a subset of tf2.headers
+    if !(Set(tf1.headers) ⊆ Set(tf2.headers))
+        error(
+            "tf1 headers must be a subset of tf2 headers. tf1 headers: $(tf1.headers), tf2 headers: $(tf2.headers)",
+        )
     end
 
     # Append all data

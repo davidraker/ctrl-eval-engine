@@ -138,7 +138,7 @@ function use_case_charts(sh::TimeFrame, op::TimeFrame, ucReg::Regulation)
             :data => [
                 Dict(
                     :x => timestamps(sh),
-                    :y => get_values(sh[:regCapKw]).vec,
+                    :y => raw_vector(sh[:regCapKw]),
                     :type => "interval",
                     :name => "Scheduled Capacity",
                 ),
@@ -171,14 +171,14 @@ function use_case_charts(sh::TimeFrame, op::TimeFrame, ucReg::Regulation)
             :data => [
                 Dict(
                     :x => timestamps(scaledAgcSignal),
-                    :y => get_values(scaledAgcSignal),
+                    :y => raw_vector(scaledAgcSignal),
                     :type => "interval",
                     :line => Dict(:dash => :dot),
                     :name => "AGC Signal",
                 ),
                 Dict(
                     :x => timestamps(actualRegPower),
-                    :y => get_values(actualRegPower),
+                    :y => raw_vector(actualRegPower),
                     :type => "interval",
                     :name => "Actual Power",
                 ),

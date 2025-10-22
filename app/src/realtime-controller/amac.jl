@@ -72,7 +72,7 @@ end
 function control(
     ess,
     amac::AMAController,
-    sp::SchedulePeriod,
+    sp::TimeFrameRow,
     useCases::AbstractArray{<:UseCase},
     t::DateTime,
     ::VariableIntervalTimeSeries,
