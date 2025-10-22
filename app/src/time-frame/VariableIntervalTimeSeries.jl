@@ -119,7 +119,10 @@ get_index(ts::VariableIntervalTimeSeries, t::DateTime) = begin
 end
 
 integrate(ts::VariableIntervalTimeSeries{V,ST}) where {V,ST<:PeriodSeries{V}} =
-    sum(ts.value .* (diff(ts.t) ./ Hour(1)))
+    sum(ts.value.vec .* (diff(ts.t) ./ Hour(1)))
+
+integrate(ts::VariableIntervalTimeSeries{V,ST}) where {V,ST<:PointSeries{V}} =
+    sum((ts.value.vec[1:end-1] .+ ts.value.vec[2:end]) ./ 2 .* (diff(ts.t) ./ Hour(1)))
 
 binary_operation(ts::VariableIntervalTimeSeries, x::Number, op) =
     VariableIntervalTimeSeries(ts.t, op.(ts.value, x))
