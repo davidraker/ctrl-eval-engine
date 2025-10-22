@@ -49,7 +49,18 @@ open(`julia --project=. evaluation_engine.jl $JOB_ID`) do evaluationStdout
         push!(logBuffer, line)
     end
 
+    # Set maximum execution time to 4 hours (14400 seconds)
+    maxExecutionTime = 4 * 60 * 60  # 4 hours in seconds
+    startTime = time()
+
     while !istaskdone(logTask)
+        # Check if maximum execution time has been exceeded
+        if time() - startTime > maxExecutionTime
+            @warn "Maximum execution time of 4 hours exceeded. Terminating process."
+            kill(evaluationStdout)
+            error("Process terminated due to timeout after 4 hours")
+        end
+
         if !isempty(logBuffer)
             logString *= join(logBuffer)
             empty!(logBuffer)

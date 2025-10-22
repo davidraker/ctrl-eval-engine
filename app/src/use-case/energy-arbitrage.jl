@@ -73,8 +73,8 @@ end
 Summarize the benefit and cost associated with `useCase` given `operation`
 """
 function calculate_metrics(
-    ::ScheduleHistory,
-    operation::OperationHistory,
+    ::TimeFrame,
+    operation::TimeFrame,
     ucEA::EnergyArbitrage,
 )
     @debug "Calculating metrics for Energy Arbitrage"
@@ -88,7 +88,7 @@ function calculate_metrics(
     ]
 end
 
-use_case_charts(sh::ScheduleHistory, op::OperationHistory, ucEA::EnergyArbitrage) = begin
+use_case_charts(sh::TimeFrame, op::TimeFrame, ucEA::EnergyArbitrage) = begin
     @debug "Generating time series charts for Energy Arbitrage"
 
     cumIncome = cum_integrate(power(op) * ucEA.actualPrice)
@@ -97,7 +97,7 @@ use_case_charts(sh::ScheduleHistory, op::OperationHistory, ucEA::EnergyArbitrage
         [
             Dict(
                 :x => timestamps(ucEA.actualPrice),
-                :y => get_values(ucEA.actualPrice),
+                :y => raw_vector(ucEA.actualPrice),
                 :type => "interval",
                 :name => "Energy Price",
                 :yAxis => "right",
@@ -107,14 +107,14 @@ use_case_charts(sh::ScheduleHistory, op::OperationHistory, ucEA::EnergyArbitrage
         [
             Dict(
                 :x => timestamps(ucEA.forecastPrice),
-                :y => get_values(ucEA.forecastPrice),
+                :y => raw_vector(ucEA.forecastPrice),
                 :type => "interval",
                 :name => "Forecast Energy Price",
                 :yAxis => "right",
             ),
             Dict(
                 :x => timestamps(ucEA.actualPrice),
-                :y => get_values(ucEA.actualPrice),
+                :y => raw_vector(ucEA.actualPrice),
                 :type => "interval",
                 :line => Dict(:dash => :dot),
                 :name => "Actual Energy Price",
@@ -132,14 +132,14 @@ use_case_charts(sh::ScheduleHistory, op::OperationHistory, ucEA::EnergyArbitrage
             :data => [
                 Dict(
                     :x => sh.t,
-                    :y => sh.powerKw,
+                    :y => raw_vector(sh[:powerKw]),
                     :type => "interval",
                     :name => "Scheduled Power",
                     :line => Dict(:dash => :dash),
                 ),
                 Dict(
                     :x => op.t,
-                    :y => op.powerKw,
+                    :y => raw_vector(op[:powerKw]),
                     :type => "interval",
                     :name => "Actual Power",
                 ),
@@ -153,7 +153,7 @@ use_case_charts(sh::ScheduleHistory, op::OperationHistory, ucEA::EnergyArbitrage
             :data => [
                 Dict(
                     :x => timestamps(cumIncome),
-                    :y => pushfirst!(get_values(cumIncome), 0),
+                    :y => raw_vector(cumIncome),
                     :type => "instance",
                 ),
             ],

@@ -10,10 +10,8 @@ using ..CtrlEvalEngine
 
 export get_scheduler,
     schedule,
-    Schedule,
-    SchedulePeriod,
-    SchedulePeriodProgress,
-    duration,
+    create_schedule,
+    create_schedule_period,
     average_power,
     ending_soc,
     regulation_capacity,
@@ -22,68 +20,31 @@ export get_scheduler,
 
 abstract type Scheduler end
 
-struct Schedule
-    powerKw::Vector{Float64}
-    tStart::Dates.DateTime
-    resolution::Dates.TimePeriod
-    soc::Vector{Float64}
-    regCapKw::Vector{Float64}
-end
-
-Schedule(
+# Constructor function to create a Schedule (TimeFrame) with standard columns
+function create_schedule(
     powerKw::Vector{Float64},
     tStart::Dates.DateTime;
     resolution::Dates.TimePeriod = Hour(1),
     SOC::Vector{Float64} = zeros(length(powerKw) + 1),
     regCapKw::Union{Nothing,Vector{Float64}} = nothing,
-) = Schedule(
-    powerKw,
-    tStart,
-    resolution,
-    SOC,
-    isnothing(regCapKw) ? zeros(length(powerKw)) : regCapKw,
 )
-
-struct SchedulePeriod
-    powerKw::Float64
-    tStart::Dates.DateTime
-    duration::Dates.TimePeriod
-    socStart::Float64
-    socEnd::Float64
-    regCapKw::Float64
+    timestamps = [tStart + resolution * i for i = 0:length(powerKw)]
+    schSeries = [PeriodSeries(powerKw), PointSeries(SOC)]
+    schHeaders = [:powerKw, :SOC]
+    if !isnothing(regCapKw)
+        push!(schSeries, PeriodSeries(regCapKw))
+        push!(schHeaders, :regCapKw)
+    end
+    return TimeFrame(timestamps, schSeries, schHeaders)
 end
 
-SchedulePeriod(
-    p::Float64,
-    tStart::Dates.DateTime;
-    duration::Dates.TimePeriod = Hour(1),
-    socStart::Float64 = 0.0,
-    socEnd::Float64 = 0.0,
-) = SchedulePeriod(p, tStart, duration, socStart, socEnd, 0.0)
+create_schedule_period(p, tStart::Dates.DateTime; duration::Dates.Period = Hour(1)) =
+    TimeFrameRow(TimeFrame([tStart, tStart + duration], [PeriodSeries([p])], [:powerKw]), 1)
 
-duration(sp::SchedulePeriod) = sp.duration
-CtrlEvalEngine.start_time(sp::SchedulePeriod) = sp.tStart
-CtrlEvalEngine.end_time(sp::SchedulePeriod) = sp.tStart + sp.duration
-average_power(sp::SchedulePeriod) = sp.powerKw
-ending_soc(sp::SchedulePeriod) = sp.socEnd
-regulation_capacity(sp::SchedulePeriod) = sp.regCapKw
-
-Base.iterate(s::Schedule, index = 1) =
-    index > length(s.powerKw) ? nothing :
-    (
-        SchedulePeriod(
-            s.powerKw[index],
-            s.tStart + s.resolution * (index - 1),
-            s.resolution,
-            s.soc[index],
-            s.soc[index+1],
-            s.regCapKw[index],
-        ),
-        index + 1,
-    )
-
-Base.eltype(::Type{Schedule}) = SchedulePeriod
-Base.length(s::Schedule) = length(s.powerKw)
+# Helper functions for schedule-specific TimeFrameRow instances
+average_power(tfr::TimeFrameRow) = tfr[:powerKw][1]
+ending_soc(tfr::TimeFrameRow) = tfr[:SOC][1][2]
+regulation_capacity(tfr::TimeFrameRow) = haskey(tfr, :regCapKw) ? tfr[:regCapKw][1] : 0.0
 
 using ..CtrlEvalEngine.EnergyStorageSimulators
 using ..CtrlEvalEngine.EnergyStorageUseCases
@@ -100,8 +61,13 @@ struct IdleScheduler <: Scheduler
     interval::Dates.Period
 end
 
-schedule(ess::EnergyStorageSystem, scheduler::IdleScheduler, _, tStart::Dates.DateTime, ::Progress) =
-    Schedule([0.0], tStart; resolution = scheduler.interval, SOC = [SOC(ess), SOC(ess)])
+schedule(
+    ess::EnergyStorageSystem,
+    scheduler::IdleScheduler,
+    _,
+    tStart::Dates.DateTime,
+    ::Progress,
+) = create_schedule([0.0], tStart; resolution = scheduler.interval, SOC = [SOC(ess), SOC(ess)])
 
 """
     get_scheduler(inputDict::Dict)

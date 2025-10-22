@@ -67,8 +67,8 @@ LoadFollowing(input::Dict, tStart::DateTime, tEnd::DateTime) = LoadFollowing(
 use_case_name(ucLF::LoadFollowing) = "Load Following"
 
 function calculate_metrics(
-    sh::ScheduleHistory,
-    operation::OperationHistory,
+    sh::TimeFrame,
+    operation::TimeFrame,
     ucLF::LoadFollowing,
 )
     tsNetLoad = ucLF.realtimeLoadPower - power(operation)
@@ -84,8 +84,8 @@ function calculate_metrics(
 end
 
 function use_case_charts(
-    sh::ScheduleHistory,
-    operation::OperationHistory,
+    sh::TimeFrame,
+    operation::TimeFrame,
     ucLF::LoadFollowing,
 )
     tsScheduledNetLoad = ucLF.forecastLoadPower - power(sh)
@@ -99,27 +99,27 @@ function use_case_charts(
             :data => [
                 Dict(
                     :x => timestamps(ucLF.forecastLoadPower),
-                    :y => get_values(ucLF.forecastLoadPower),
+                    :y => raw_vector(ucLF.forecastLoadPower),
                     :type => "interval",
                     :name => "Forecast Load",
                     :line => Dict(:dash => :dash),
                 ),
                 Dict(
                     :x => timestamps(tsScheduledNetLoad),
-                    :y => get_values(tsScheduledNetLoad),
+                    :y => raw_vector(tsScheduledNetLoad),
                     :type => "interval",
                     :name => "Scheduled Net Load",
                     :line => Dict(:dash => :dash),
                 ),
                 Dict(
                     :x => timestamps(ucLF.realtimeLoadPower),
-                    :y => get_values(ucLF.realtimeLoadPower),
+                    :y => raw_vector(ucLF.realtimeLoadPower),
                     :type => "interval",
                     :name => "Real-time Load",
                 ),
                 Dict(
                     :x => timestamps(tsRtNetLoad),
-                    :y => get_values(tsRtNetLoad),
+                    :y => raw_vector(tsRtNetLoad),
                     :type => "interval",
                     :name => "Real-time Net Load",
                 ),
@@ -132,7 +132,7 @@ function use_case_charts(
             :data => [
                 Dict(
                     :x => timestamps(tsRelError),
-                    :y => get_values(tsRelError),
+                    :y => raw_vector(tsRelError),
                     :type => "interval",
                     :name => "Relative Error",
                 ),

@@ -1,4 +1,4 @@
-
+using CtrlEvalEngine: ScheduleHistory, OperationHistory, raw_vector
 using CtrlEvalEngine.EnergyStorageSimulators:
     LiIonBattery, LFP_LiIonBatterySpecs, LiIonBatteryStates, p_max
 using CtrlEvalEngine.EnergyStorageUseCases:
@@ -17,8 +17,16 @@ t = now()
 
 progress = Progress(
     5.0,
-    ScheduleHistory([t], Float64[], Float64[0.5], Float64[]),
-    OperationHistory([t], Float64[], Float64[0.5], Float64[1.0]),
+    TimeFrame(
+        [t],
+        [PeriodSeries{Float64}([]), PointSeries([0.5]), PeriodSeries{Float64}([])],
+        [:powerKw, :SOC, :regCapKw],
+    ),
+    TimeFrame(
+        [t],
+        [PeriodSeries{Float64}([]), PointSeries([0.5]), PointSeries([1.0])],
+        [:powerKw, :SOC, :SOH],
+    ),
 )
 
 @testset "Manual Scheduler" begin
@@ -28,9 +36,9 @@ progress = Progress(
     )
     manSched = ManualScheduler([3.6, 65.2, 87.9, 2.4, 91.7], floor(now(), Hour(1)), Hour(1))
     sched = schedule(ess, manSched, Nothing, floor(now(), Hour(1)), progress)
-    @test sched.powerKw == [3.6, 65.2, 87.9, 2.4, 91.7]
-    @test sched.tStart == floor(now(), Hour(1))
-    @test sched.resolution == Hour(1)
+    @test raw_vector(sched[:powerKw]) == [3.6, 65.2, 87.9, 2.4, 91.7]
+    @test start_time(sched) == floor(now(), Hour(1))
+    @test timestamps(sched)[2] - timestamps(sched)[1] == Hour(1)
 end
 
 @testset "Time of Use Scheduler" begin
@@ -51,7 +59,7 @@ end
         TimeOfUseRuleSet([0.4, 0.7], [90, nothing, 10]),
     )
     sched = schedule(ess, scheduler, useCases, floor(now(), Hour(1)), progress)
-    @test sched.powerKw == [-433.86091563731236, -0.0, 500.0, -0.0, -500.0]
+    @test raw_vector(sched[:powerKw]) == [-433.86091563731236, -0.0, 500.0, -0.0, -500.0]
 end
 
 @testset "Optimization Scheduler" begin
@@ -68,21 +76,21 @@ end
         ),
     )]
     sVar = schedule(ess, optScheduler, useCases, tStart, progress)
-    @test sVar.powerKw[2] > sVar.powerKw[3]
+    @test raw_vector(sVar[:powerKw])[2] > raw_vector(sVar[:powerKw])[3]
 
     useCases =
         UseCase[EnergyArbitrage(FixedIntervalTimeSeries(tStart, Hour(1), [10, 20, 1, 10]))]
     sFix = schedule(ess, optScheduler, useCases, tStart, progress)
-    @test all(sVar.powerKw .== sFix.powerKw)
+    @test all(raw_vector(sVar[:powerKw]) .== raw_vector(sFix[:powerKw]))
 
     # Sub-hourly resolution
     optScheduler = OptScheduler(Minute(30), Hour(4), 8)
     sSubHourly = schedule(ess, optScheduler, useCases, tStart, progress)
-    @test all(sum(reshape(sSubHourly.powerKw, 2, :); dims = 1)[:] ./ 2 .≈ sFix.powerKw)
+    @test all(sum(reshape(raw_vector(sSubHourly[:powerKw]), 2, :); dims = 1)[:] ./ 2 .≈ raw_vector(sFix[:powerKw]))
 
     optScheduler = OptScheduler(Minute(15), Hour(4), 16)
     sSubHourly = schedule(ess, optScheduler, useCases, tStart, progress)
-    @test all(sum(reshape(sSubHourly.powerKw, 4, :); dims = 1)[:] ./ 4 .≈ sFix.powerKw)
+    @test all(sum(reshape(raw_vector(sSubHourly[:powerKw]), 4, :); dims = 1)[:] ./ 4 .≈ raw_vector(sFix[:powerKw]))
 
     # OptScheduler with regulation
     useCases = UseCase[
@@ -105,13 +113,13 @@ end
 
     optScheduler = OptScheduler(Hour(1), Hour(4), 8)
     sReg = schedule(ess, optScheduler, useCases, tStart, progress)
-    @test length(sReg.powerKw) == 4
+    @test length(raw_vector(sReg[:powerKw])) == 4
 
     optScheduler2 =
         OptScheduler(Hour(1), Hour(4), 4; powerLimitPu = 0.5, minNetLoadKw = -100)
     s2 = schedule(ess, optScheduler2, useCases, tStart, progress)
-    @test all(abs.(s2.powerKw) .≤ p_max(ess.specs) * 0.5)
-    @test all(s2.powerKw .≤ 100)
+    @test all(abs.(raw_vector(s2[:powerKw])) .≤ p_max(ess.specs) * 0.5)
+    @test all(raw_vector(s2[:powerKw]) .≤ 100)
 end
 
 @testset "Rule-based Scheduler" begin
@@ -129,5 +137,5 @@ end
         ),
     )]
     sRB = schedule(ess, ruleBasedScheduler, useCases, tStart, progress)
-    @test length(sRB.powerKw) == 24
+    @test length(raw_vector(sRB[:powerKw])) == 24
 end

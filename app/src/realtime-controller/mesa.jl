@@ -3,7 +3,7 @@
 using Dates
 using CtrlEvalEngine.EnergyStorageSimulators
 using CtrlEvalEngine.EnergyStorageUseCases: UseCase, LoadFollowing
-using CtrlEvalEngine.EnergyStorageScheduling: SchedulePeriod
+using CtrlEvalEngine.EnergyStorageScheduling: create_schedule_period
 
 # export MesaController, MesaMode, Vertex, VertexCurve, RampParams, apply_energy_limits, apply_ramps, apply_time_constants, control
 abstract type MesaMode end
@@ -130,7 +130,7 @@ end
 function control(
     ess::EnergyStorageSystem,
     controller::MesaController,
-    schedulePeriod::SchedulePeriod,
+    schedulePeriod::TimeFrameRow,
     useCases::AbstractVector{<:UseCase},
     t::Dates.DateTime,
     spProgress::VariableIntervalTimeSeries,

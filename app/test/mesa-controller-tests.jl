@@ -86,7 +86,7 @@ using CtrlEvalEngine.EnergyStorageRTControl:
         FixedIntervalTimeSeries(tStart, Dates.Hour(1), [RegulationPricePoint(0.05, 0.42)]),
         50.0,
     )]
-    schedulePeriod = SchedulePeriod(65.2, tStart, Second(268), 0.0, 0.0, 500.0)
+    schedulePeriod = create_schedule_period(65.2, tStart, Second(268), 0.0, 0.0, 500.0)
     controller = MesaController(
         [AGCMode(MesaModeParams(1), true, RampParams(100, 200, 100, 200), 40.0, 60.0)],
         Dates.Second(4),
@@ -96,7 +96,7 @@ end
 
 @testset "Charge Discharge Storage MESA Mode" begin
     useCases = UseCase[]
-    schedulePeriod = SchedulePeriod(65.2, tStart; duration = Hour(1))
+    schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
 
     # Test that mode follows the specified power percentage (53% of 500kW is 265kW).
     controller = MesaController(
@@ -153,7 +153,7 @@ end
         ],
         Dates.Minute(5),
     )
-    schedulePeriod = SchedulePeriod(-65.2, tStart; duration = Hour(1))
+    schedulePeriod = create_schedule_period(-65.2, tStart; duration = Hour(1))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     @test all(
         controller.wip.value .== [
@@ -175,7 +175,7 @@ end
 
 @testset "Active Power Limit MESA Mode" begin
     useCases = UseCase[]
-    schedulePeriod = SchedulePeriod(65.2, tStart; duration = Hour(1))
+    schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
     rampParams = RampParams(100.0, 200.0, 100.0, 200.0)
 
     # Test Discharge Limit:
@@ -193,7 +193,7 @@ end
         ],
         Dates.Minute(5),
     )
-    schedulePeriod = SchedulePeriod(65.2, tStart; duration = Hour(1))
+    schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     @test all(
         controller.wip.value .==
@@ -215,7 +215,7 @@ end
         ],
         Dates.Minute(5),
     )
-    schedulePeriod = SchedulePeriod(-65.2, tStart; duration = Hour(1))
+    schedulePeriod = create_schedule_period(-65.2, tStart; duration = Hour(1))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     @test all(
         controller.wip.value .== [
@@ -248,7 +248,7 @@ end
         [ActiveResponseMode(MesaModeParams(1), 30.0, 1.0, 1000.0, 1000.0)],
         Dates.Minute(5),
     )
-    schedulePeriod = SchedulePeriod(65.2, tStart; duration = Hour(1))
+    schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
 
     @test all(
@@ -270,7 +270,7 @@ end
         [ActiveResponseMode(MesaModeParams(1), 30.0, 10.0, 1000.0, 1000.0)],
         Dates.Minute(5),
     )
-    schedulePeriod = SchedulePeriod(65.2, tStart; duration = Hour(1))
+    schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     @test all(
         controller.wip.value .==
@@ -291,7 +291,7 @@ end
         [ActiveResponseMode(MesaModeParams(1), 30.0, 10.0, 1000.0, 1000.0)],
         Dates.Minute(5),
     )
-    schedulePeriod = SchedulePeriod(65.2, tStart; duration = Hour(1))
+    schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     # @test controller.wip.value ==
     #       [-2.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -2.0, -3.0, -4.0, -5.0]

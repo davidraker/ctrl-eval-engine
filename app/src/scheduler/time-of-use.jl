@@ -106,7 +106,7 @@ function schedule(
                     schedule_vector[i] * efficiency
                 ) / e_max(ess)
     end
-    return Schedule(
+    return create_schedule(
         schedule_vector,
         tStart;
         resolution = scheduler.resolution,

@@ -38,7 +38,7 @@ where `t` is the current timestamp and
 The returned control sequence, which may or may not cover the entire/remaining time in `schedulePeriod`,
 will be executed before calling this function again with updated ESS states and `spProgress`.
 """
-control(ess, controller::RTController, schedulePeriod::SchedulePeriod, useCases) =
+control(ess, controller::RTController, schedulePeriod::TimeFrameRow, useCases) =
     control(ess, controller, schedulePeriod, useCases, start_time(schedulePeriod), nothing)
 
 include("passthrough.jl")

@@ -55,18 +55,18 @@ end
 ηRT(specs::VRFBatterySpecs) = specs.roundtripEfficiency
 
 ηRT(ess::VRFBattery) = ess.specs.roundtripEfficiency
-    # ΔSOC(
-    #     ess,
-    #     -ess.specs.powerCapacityKw / ess.specs.energyCapacityKwh,
-    #     1,
-    #     ess.specs.TsetDegreeC,
-    # ) /
-    # -ΔSOC(
-    #     ess,
-    #     ess.specs.powerCapacityKw / ess.specs.energyCapacityKwh,
-    #     1,
-    #     ess.specs.TsetDegreeC,
-    # )
+# ΔSOC(
+#     ess,
+#     -ess.specs.powerCapacityKw / ess.specs.energyCapacityKwh,
+#     1,
+#     ess.specs.TsetDegreeC,
+# ) /
+# -ΔSOC(
+#     ess,
+#     ess.specs.powerCapacityKw / ess.specs.energyCapacityKwh,
+#     1,
+#     ess.specs.TsetDegreeC,
+# )
 
 self_discharge_rate(ess::VRFBattery) = -ess.specs.C0 / 0.9
 
@@ -77,7 +77,9 @@ e_max(ess::VRFBattery) = 0.9 * ess.specs.energyCapacityKwh
 e_min(ess::VRFBattery) = 0.1 * ess.specs.energyCapacityKwh
 
 p_max(specs::VRFBatterySpecs) = specs.powerCapacityKw
-p_max(ess::VRFBattery) = ess.specs.powerCapacityKw * min(ess.states.energy / ess.specs.energyCapacityKwh * 1.98, 1)
+p_max(ess::VRFBattery) =
+    ess.specs.powerCapacityKw *
+    min(ess.states.energy / ess.specs.energyCapacityKwh * 1.98, 1)
 
 function p_max(ess::VRFBattery, durationHour::Real, ambientTemperatureDegreeC::Real)
     s = ess.states.energy / ess.specs.energyCapacityKwh
@@ -86,7 +88,9 @@ function p_max(ess::VRFBattery, durationHour::Real, ambientTemperatureDegreeC::R
 
     a = ess.specs.C2 + ess.specs.C5 / s^2
     b = ess.specs.C1 + ess.specs.C4 / s + ess.specs.C5 / s^2
-    c = C0_new + ess.specs.C3 / s^2 - (0.1 - s) / durationHour / ess.specs.dischargeMultiplier
+    c =
+        C0_new + ess.specs.C3 / s^2 -
+        (0.1 - s) / durationHour / ess.specs.dischargeMultiplier
 
     @debug "p_max calculation" a b c
     pMaxEnergy = if b^2 - 4 * a * c ≥ 0
@@ -100,7 +104,8 @@ end
 
 p_min(specs::VRFBatterySpecs) = -specs.powerCapacityKw
 p_min(ess::VRFBattery) =
-    ess.specs.powerCapacityKw * max((ess.states.energy / ess.specs.energyCapacityKwh - 0.7) * 1.51 - 1, -1)
+    ess.specs.powerCapacityKw *
+    max((ess.states.energy / ess.specs.energyCapacityKwh - 0.7) * 1.51 - 1, -1)
 
 function p_min(ess::VRFBattery, durationHour::Real, ambientTemperatureDegreeC::Real)
     s = ess.states.energy / ess.specs.energyCapacityKwh
@@ -156,6 +161,11 @@ function _operate!(
     temperatureDegreeC::Real,
 )
     pNorm = powerKw / ess.specs.energyCapacityKwh
-    ess.states.energy += _ΔSOC(ess, pNorm, durationHour, temperatureDegreeC) * ess.specs.energyCapacityKwh
-    ess.states.energy = min(max(ess.states.energy, 0.1 * ess.specs.energyCapacityKwh), 0.9 * ess.specs.energyCapacityKwh)
+    ess.states.energy +=
+        _ΔSOC(ess, pNorm, durationHour, temperatureDegreeC) * ess.specs.energyCapacityKwh
+    ess.states.energy = min(
+        max(ess.states.energy, 0.1 * ess.specs.energyCapacityKwh),
+        0.9 * ess.specs.energyCapacityKwh,
+    )
+    return (; powerKw, SOC = SOC(ess))
 end

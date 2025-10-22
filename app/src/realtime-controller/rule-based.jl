@@ -7,7 +7,7 @@ RuleBasedController(config::Dict) = RuleBasedController(max(0, config["loadBound
 function control(
     ess::EnergyStorageSystem,
     controller::RuleBasedController,
-    schedulePeriod::SchedulePeriod,
+    schedulePeriod::TimeFrameRow,
     useCases::AbstractArray{<:UseCase},
     t::DateTime,
     _,

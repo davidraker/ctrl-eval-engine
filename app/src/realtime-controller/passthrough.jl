@@ -4,7 +4,7 @@ struct PassThroughController <: RTController end
 function control(
     _,
     controller::PassThroughController,
-    schedulePeriod::SchedulePeriod,
+    schedulePeriod::TimeFrameRow,
     useCases::AbstractVector{<:UseCase},
     t,
     _,

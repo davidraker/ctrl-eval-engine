@@ -78,7 +78,7 @@ function schedule(
     @debug "RL-scheduler" t = tStart resolution = rlScheduler.resolution price
     put!(rlScheduler.chOut, JSON.json(Dict(:price => price, :initial_soc => SOC(ess))))
     scheduleDict = JSON.parse(take!(rlScheduler.chIn))
-    return Schedule(
+    return create_schedule(
         float.(scheduleDict["powerKw"]),
         tStart;
         resolution = rlScheduler.resolution,

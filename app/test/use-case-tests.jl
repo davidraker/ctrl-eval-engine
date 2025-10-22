@@ -1,73 +1,63 @@
 
 using CtrlEvalEngine:
-    ScheduleHistory, OperationHistory, Progress, power, VariableIntervalTimeSeries
+    ScheduleHistory, OperationHistory, Progress, VariableIntervalTimeSeries
 using CtrlEvalEngine.EnergyStorageUseCases
 using Dates
 using LinearAlgebra
 
 @testset "Use Cases" begin
     @testset "Energy Net Income" begin
-        @test power(
-            OperationHistory(
-                DateTime(2022, 1, 1):Hour(1):DateTime(2022, 1, 1, 4),
-                [1.0, 1.0, 1.0, 1.0],
-                zeros(4),
-                ones(4),
-            ),
-        ) ⋅ VariableIntervalTimeSeries(
+        @test OperationHistory(
+            DateTime(2022, 1, 1):Hour(1):DateTime(2022, 1, 1, 4),
+            [1.0, 1.0, 1.0, 1.0],
+            zeros(5),
+            ones(5),
+        )[:powerKw] ⋅ VariableIntervalTimeSeries(
             DateTime(2022, 1, 1):Hour(1):DateTime(2022, 1, 1, 4),
             [1.0, 2.0, 3.0, 4.0],
         ) == 10.0
 
-        @test power(
-            OperationHistory(
-                DateTime(2022, 1, 1):Hour(1):DateTime(2022, 1, 1, 4),
-                [-1.0, -1.0, 1.0, 1.0],
-                zeros(4),
-                ones(4),
-            ),
-        ) ⋅ VariableIntervalTimeSeries(
+        @test OperationHistory(
+            DateTime(2022, 1, 1):Hour(1):DateTime(2022, 1, 1, 4),
+            [-1.0, -1.0, 1.0, 1.0],
+            zeros(5),
+            ones(5),
+        )[:powerKw] ⋅ VariableIntervalTimeSeries(
             DateTime(2022, 1, 1):Hour(1):DateTime(2022, 1, 1, 4),
             [1.0, 2.0, 3.0, 4.0],
         ) == 4.0
 
-        @test power(
-            OperationHistory(
-                DateTime(2022, 1, 1):Hour(1):DateTime(2022, 1, 1, 4),
-                [-1.0, -1.0, 1.0, 1.0],
-                zeros(5),
-                ones(5),
-            ),
-        ) ⋅ VariableIntervalTimeSeries(
+        @test OperationHistory(
+            DateTime(2022, 1, 1):Hour(1):DateTime(2022, 1, 1, 4),
+            [-1.0, -1.0, 1.0, 1.0],
+            zeros(5),
+            ones(5),
+        )[:powerKw] ⋅ VariableIntervalTimeSeries(
             DateTime(2022, 1, 1):Minute(30):DateTime(2022, 1, 1, 4),
             [1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 4.0, 0.0],
         ) == 2.0
 
-        @test power(
-            OperationHistory(
-                DateTime(2022, 1, 1):Minute(30):DateTime(2022, 1, 1, 4),
-                [-1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
-                zeros(9),
-                ones(9),
-            ),
-        ) ⋅ VariableIntervalTimeSeries(
+        @test OperationHistory(
+            DateTime(2022, 1, 1):Minute(30):DateTime(2022, 1, 1, 4),
+            [-1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
+            zeros(9),
+            ones(9),
+        )[:powerKw] ⋅ VariableIntervalTimeSeries(
             DateTime(2022, 1, 1):Hour(1):DateTime(2022, 1, 1, 4),
             [1.0, 2.0, 3.0, 4.0],
         ) == 2.0
 
-        @test power(
-            OperationHistory(
-                [
-                    DateTime("2022-01-01T00:30"),
-                    DateTime("2022-01-01T01:15"),
-                    DateTime("2022-01-01T02:00"),
-                    DateTime("2022-01-01T03:45"),
-                ],
-                [1.0, -1.0, 1.0],
-                zeros(4),
-                ones(4),
-            ),
-        ) ⋅ VariableIntervalTimeSeries(
+        @test OperationHistory(
+            [
+                DateTime("2022-01-01T00:30"),
+                DateTime("2022-01-01T01:15"),
+                DateTime("2022-01-01T02:00"),
+                DateTime("2022-01-01T03:45"),
+            ],
+            [1.0, -1.0, 1.0],
+            zeros(4),
+            ones(4),
+        )[:powerKw] ⋅ VariableIntervalTimeSeries(
             DateTime(2022, 1, 1):Hour(1):DateTime(2022, 1, 1, 4),
             [1.0, 2.0, 3.0, 4.0],
         ) == 1.0 * 0.5 + 2.0 * 0.25 + 2.0 * -0.75 + 3.0 + 4.0 * 0.75
@@ -83,14 +73,12 @@ using LinearAlgebra
             ]
 
             irregularOperationIncomeMatches =
-                power(
-                    OperationHistory(
-                        tOperation,
-                        ones(length(tOperation) - 1),
-                        zeros(length(tOperation)),
-                        ones(length(tOperation)),
-                    ),
-                ) ⋅ VariableIntervalTimeSeries(
+                OperationHistory(
+                    tOperation,
+                    ones(length(tOperation) - 1),
+                    zeros(length(tOperation)),
+                    ones(length(tOperation)),
+                )[:powerKw] ⋅ VariableIntervalTimeSeries(
                     DateTime(2022, 1, 1):Minute(10):DateTime(2022, 1, 1, 4),
                     ones(24),
                 ) ≈ 3.25
@@ -166,7 +154,7 @@ using LinearAlgebra
         )
 
         mileagePerHour = sum(
-            abs.(diff(reshape(get_values(ucReg.AGCSignalPu), 900, :); dims = 1));
+            abs.(diff(reshape(get_values(ucReg.AGCSignalPu).vec, 900, :); dims = 1));
             dims = 1,
         )[:]
 
@@ -185,22 +173,20 @@ using LinearAlgebra
     @testset "Demand Charge Reduction" begin
         ucDCR = DemandChargeReduction(
             EnergyStorageUseCases.FlatDemandChargeRateStructure(10),
-            FixedIntervalTimeSeries(
-                DateTime(2023),
-                Minute(15),
-                collect(1:12)
-            )
+            FixedIntervalTimeSeries(DateTime(2023), Minute(15), collect(1:12)),
         )
-        @test demand_charge(ucDCR, FixedIntervalTimeSeries(DateTime(2023), Hour(1), zeros(3))) == 120
+        @test demand_charge(
+            ucDCR,
+            FixedIntervalTimeSeries(DateTime(2023), Hour(1), zeros(3)),
+        ) == 120
 
         ucDCR = DemandChargeReduction(
             EnergyStorageUseCases.FlatDemandChargeRateStructure(10),
-            FixedIntervalTimeSeries(
-                DateTime(2023),
-                Minute(5),
-                collect(1:24)
-            )
+            FixedIntervalTimeSeries(DateTime(2023), Minute(5), collect(1:24)),
         )
-        @test demand_charge(ucDCR, FixedIntervalTimeSeries(DateTime(2023), Hour(1), zeros(2))) == 230
+        @test demand_charge(
+            ucDCR,
+            FixedIntervalTimeSeries(DateTime(2023), Hour(1), zeros(2)),
+        ) == 230
     end
 end

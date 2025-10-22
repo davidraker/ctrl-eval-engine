@@ -23,8 +23,8 @@ PeakLimiting(input::Dict) = PeakLimiting(
 use_case_name(ucPL::PeakLimiting) = "Peak Limiting"
 
 function calculate_metrics(
-    ::ScheduleHistory,
-    operation::OperationHistory,
+    ::TimeFrame,
+    operation::TimeFrame,
     ucLF::PeakLimiting,
 )
     [
@@ -34,7 +34,7 @@ function calculate_metrics(
     ]
 end
 
-function use_case_charts(::ScheduleHistory, operation::OperationHistory, ucLF::PeakLimiting)
+function use_case_charts(::TimeFrame, operation::TimeFrame, ucLF::PeakLimiting)
     [
         # TODO: this is an example to be replaced
         Dict(
@@ -46,19 +46,19 @@ function use_case_charts(::ScheduleHistory, operation::OperationHistory, ucLF::P
             :data => [
                 Dict(
                     :x => timestamps(ucLF.forecastPower),
-                    :y => get_values(ucLF.forecastPower),
+                    :y => raw_vector(ucLF.forecastPower),
                     :type => "interval",
                     :name => "Forecast  Power",
                 ),
                 Dict(
                     :x => timestamps(ucLF.realtimePower),
-                    :y => get_values(ucLF.realtimePower),
+                    :y => raw_vector(ucLF.realtimePower),
                     :type => "interval",
                     :name => "Real-time  Power",
                 ),
                 Dict(
                     :x => timestamps(ucLF.realtimePower),
-                    :y => zeros(length(get_values(ucLF.realtimePower))), # TODO: to be replaced with actual errors
+                    :y => zeros(length(raw_vector(ucLF.realtimePower))), # TODO: to be replaced with actual errors
                     :type => "interval",
                     :name => "Relative Error",
                     :yAxis => "right",

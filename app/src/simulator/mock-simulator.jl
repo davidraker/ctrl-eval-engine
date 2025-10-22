@@ -24,6 +24,7 @@ function _operate!(ess::MockSimulator, powerKw::Real, durationHour::Real, _::Rea
         ess.states.SOC -
         (powerKw > 0 ? powerKw / ess.specs.efficiency : powerKw * ess.specs.efficiency) *
         durationHour / ess.specs.energyCapacityKwh
+    return (; powerKw, SOC = SOC(ess))
 end
 
 SOC(ess::MockSimulator) = ess.states.SOC

@@ -106,7 +106,7 @@ function schedule(
         )
     end
 
-    return Schedule(
+    return create_schedule(
         optimal_power,
         tStart;
         resolution = scheduler.resolution,

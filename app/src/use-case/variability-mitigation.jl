@@ -1,6 +1,6 @@
 
 struct VariabilityMitigation <: UseCase
-    pvGenProfile::FixedIntervalTimeSeries{<:TimePeriod,Float64}
+    pvGenProfile::FixedIntervalTimeSeries{<:TimePeriod,Float64,PeriodSeries{Float64}}
     ratedPowerKw::Float64
 end
 
@@ -14,7 +14,7 @@ VariabilityMitigation(config::Dict) = VariabilityMitigation(
         DateTime(config["pvGenProfile"]["DateTime"][1]),
         DateTime(config["pvGenProfile"]["DateTime"][2]) -
         DateTime(config["pvGenProfile"]["DateTime"][1]),
-        Float64.(config["pvGenProfile"]["Power"]),
+        PeriodSeries(Float64.(config["pvGenProfile"]["Power"])),
     ),
     config["ratedPowerKw"],
 )
@@ -26,7 +26,7 @@ VariabilityMitigation(config::Dict, tStart::DateTime, tEnd::DateTime) =
                 DateTime(config["pvGenProfile"]["DateTime"][1]),
                 DateTime(config["pvGenProfile"]["DateTime"][2]) -
                 DateTime(config["pvGenProfile"]["DateTime"][1]),
-                float.(config["pvGenProfile"]["Power"]),
+                PeriodSeries(float.(config["pvGenProfile"]["Power"])),
             ),
             tStart,
             tEnd,
@@ -44,10 +44,10 @@ moving_std(ts::TimeSeries, windowLength::Dates.TimePeriod, samplingRate::Dates.T
         # end
 
         v = [std(ts, t - windowLength, t) for t = tStart:samplingRate:end_time(ts)]
-        return FixedIntervalTimeSeries(tStart, samplingRate, v)
+        return FixedIntervalTimeSeries(tStart, samplingRate, PointSeries(v))
     end
 
-calculate_metrics(sh::ScheduleHistory, op::OperationHistory, ucVM::VariabilityMitigation) =
+calculate_metrics(sh::TimeFrame, op::TimeFrame, ucVM::VariabilityMitigation) =
     begin
         @debug "Calculating metrics for Power Smoothing"
         netPowerSmooth = extract(
@@ -75,7 +75,7 @@ calculate_metrics(sh::ScheduleHistory, op::OperationHistory, ucVM::VariabilityMi
         ]
     end
 
-use_case_charts(sh::ScheduleHistory, op::OperationHistory, ucVM::VariabilityMitigation) =
+use_case_charts(sh::TimeFrame, op::TimeFrame, ucVM::VariabilityMitigation) =
     begin
         @debug "Generating time series charts for Power Smoothing"
         netPowerSmooth = extract(
@@ -97,14 +97,14 @@ use_case_charts(sh::ScheduleHistory, op::OperationHistory, ucVM::VariabilityMiti
                 :data => [
                     Dict(
                         :x => timestamps(ucVM.pvGenProfile),
-                        :y => get_values(ucVM.pvGenProfile),
+                        :y => raw_vector(ucVM.pvGenProfile),
                         :type => "interval",
                         :name => "Original Power",
                         :line => Dict(:dash => :dash),
                     ),
                     Dict(
                         :x => timestamps(netPowerSmooth),
-                        :y => get_values(netPowerSmooth),
+                        :y => raw_vector(netPowerSmooth),
                         :type => "interval",
                         :name => "Smoothed Power",
                     ),
@@ -117,14 +117,14 @@ use_case_charts(sh::ScheduleHistory, op::OperationHistory, ucVM::VariabilityMiti
                 :data => [
                     Dict(
                         :x => timestamps(originalVariability),
-                        :y => get_values(originalVariability),
+                        :y => raw_vector(originalVariability),
                         :type => "interval",
                         :name => "Original Variability",
                         :line => Dict(:dash => :dash),
                     ),
                     Dict(
                         :x => timestamps(smoothedVariability),
-                        :y => get_values(smoothedVariability),
+                        :y => raw_vector(smoothedVariability),
                         :type => "interval",
                         :name => "Smoothed Variability",
                     ),

@@ -60,7 +60,7 @@ end
 function control(
     ess::EnergyStorageSystem,
     controller::UserDefinedRTController,
-    schedulePeriod::SchedulePeriod,
+    schedulePeriod::TimeFrameRow,
     useCases::AbstractVector{<:UseCase},
     t::Dates.DateTime,
     spProgress::VariableIntervalTimeSeries,

@@ -28,7 +28,11 @@ Base.:zero(
 
 struct Regulation <: UseCase
     AGCSignalPu::TimeSeries{Float64}
-    price::FixedIntervalTimeSeries{<:Dates.TimePeriod,RegulationPricePoint}
+    price::FixedIntervalTimeSeries{
+        <:Dates.TimePeriod,
+        RegulationPricePoint,
+        PeriodSeries{RegulationPricePoint},
+    }
     performanceScore::Float64
 end
 
@@ -36,23 +40,24 @@ Regulation(input::Dict, tStart::DateTime, tEnd::DateTime) = begin
     agcSignalDict = input["data"]["agcSignal"]
     agcCore = FixedIntervalTimeSeries(
         DateTime(agcSignalDict["DateTime"][1]),
-        DateTime(agcSignalDict["DateTime"][2]) -
-        DateTime(agcSignalDict["DateTime"][1]),
-        float.(agcSignalDict["Dispatch_pu"]),
+        DateTime(agcSignalDict["DateTime"][2]) - DateTime(agcSignalDict["DateTime"][1]),
+        PeriodSeries(float.(agcSignalDict["Dispatch_pu"])),
     )
     @debug "Constructing Regulation object" agcSignalDict
     regPriceDict = input["data"]["regulationPrices"]
-    regPriceCapacity = if input["inputs"]["regulationPrices"]["optionSelected"] == "Wholesale Market"
-        regPriceDict["RegUp"]
-    else
-        regPriceDict["CapacityPrice_per_MW"]
-    end 
+    regPriceCapacity =
+        if input["inputs"]["regulationPrices"]["optionSelected"] == "Wholesale Market"
+            regPriceDict["RegUp"]
+        else
+            regPriceDict["CapacityPrice_per_MW"]
+        end
 
-    regPriceMileage = if input["inputs"]["regulationPrices"]["optionSelected"] == "Wholesale Market"
-        zeros(length(regPriceCapacity))
-    else
-        regPriceDict["MileagePrice_per_MW"]
-    end
+    regPriceMileage =
+        if input["inputs"]["regulationPrices"]["optionSelected"] == "Wholesale Market"
+            zeros(length(regPriceCapacity))
+        else
+            regPriceDict["MileagePrice_per_MW"]
+        end
     Regulation(
         if get(agcSignalDict, "repeated", false)
             RepeatedTimeSeries(agcCore, tStart, tEnd)
@@ -62,17 +67,15 @@ Regulation(input::Dict, tStart::DateTime, tEnd::DateTime) = begin
         extract(
             FixedIntervalTimeSeries(
                 DateTime(regPriceDict["Time"][1]),
-                DateTime(regPriceDict["Time"][2]) -
-                DateTime(regPriceDict["Time"][1]),
-                [
-                    RegulationPricePoint(cap / 1000, mil / 1000) for (cap, mil) in zip(
-                        regPriceCapacity,
-                        regPriceMileage,
-                    )
-                ],
+                DateTime(regPriceDict["Time"][2]) - DateTime(regPriceDict["Time"][1]),
+                PeriodSeries([
+                    RegulationPricePoint(cap / 1000, mil / 1000) for
+                    (cap, mil) in zip(regPriceCapacity, regPriceMileage)
+                ]),
             ),
             tStart,
-            tEnd,
+            tEnd;
+            extendToGrid = true,
         ),
         input["data"]["performanceFactor"],
     )
@@ -92,27 +95,19 @@ Base.:*(pp::RegulationPricePoint, op::RegulationOperationPoint) =
 Base.:*(op::RegulationOperationPoint, pp::RegulationPricePoint) =
     pp.capacityPrice * op.capacity + pp.servicePrice * op.capacity * op.mileage
 
-function regulation_history(sh::ScheduleHistory, ucReg::Regulation)
+function regulation_history(sh::TimeFrame, ucReg::Regulation)
     VariableIntervalTimeSeries(
         sh.t,
         [
             RegulationOperationPoint(
                 cap,
-                sum(
-                    abs.(
-                        diff(
-                            get_values(
-                                ucReg.AGCSignalPu,
-                                sh.t[iSchedulePeriod],
-                                sh.t[iSchedulePeriod+1],
-                            ),
-                        )
-                    ),
-                ),
-            ) for (iSchedulePeriod, cap) in enumerate(sh.regCapKw)
+                sum(abs.(diff(get_values(ucReg.AGCSignalPu, t1, t2).vec))),
+            ) for (cap, t1, t2) in sh[:regCapKw]
         ],
     )
 end
+
+initialize_extra_schedules(::Regulation) = [(PeriodSeries{Float64}(), :regCapKw)]
 
 calculate_net_benefit(progress::Progress, ucReg::Regulation) = begin
     @debug "Calculating Regulation benefit" schedule = progress.schedule regHistory =
@@ -120,11 +115,9 @@ calculate_net_benefit(progress::Progress, ucReg::Regulation) = begin
     regulation_income(regulation_history(progress.schedule, ucReg), ucReg)
 end
 
-function calculate_metrics(sh::ScheduleHistory, op::OperationHistory, ucReg::Regulation)
+function calculate_metrics(sh::TimeFrame, op::TimeFrame, ucReg::Regulation)
     regIncome = regulation_income(regulation_history(sh, ucReg), ucReg)
-    tsError =
-        ucReg.AGCSignalPu * VariableIntervalTimeSeries(sh.t, sh.regCapKw) -
-        (power(op) - power(sh))
+    tsError = ucReg.AGCSignalPu * sh[:regCapKw] - (power(op) - power(sh))
     rmse = round(sqrt(mean(tsError^2)); sigdigits = 2)
     return [
         Dict(:sectionTitle => "Frequency Regulation"),
@@ -133,8 +126,8 @@ function calculate_metrics(sh::ScheduleHistory, op::OperationHistory, ucReg::Reg
     ]
 end
 
-function use_case_charts(sh::ScheduleHistory, op::OperationHistory, ucReg::Regulation)
-    scaledAgcSignal = ucReg.AGCSignalPu * VariableIntervalTimeSeries(sh.t, sh.regCapKw)
+function use_case_charts(sh::TimeFrame, op::TimeFrame, ucReg::Regulation)
+    scaledAgcSignal = ucReg.AGCSignalPu * sh[:regCapKw]
     actualRegPower = power(op) - power(sh)
     [
         Dict(
@@ -144,8 +137,8 @@ function use_case_charts(sh::ScheduleHistory, op::OperationHistory, ucReg::Regul
             :yAxisRight => Dict(:title => raw"Price ($/kWh)"),
             :data => [
                 Dict(
-                    :x => sh.t,
-                    :y => sh.regCapKw,
+                    :x => timestamps(sh),
+                    :y => raw_vector(sh[:regCapKw]),
                     :type => "interval",
                     :name => "Scheduled Capacity",
                 ),
@@ -178,14 +171,14 @@ function use_case_charts(sh::ScheduleHistory, op::OperationHistory, ucReg::Regul
             :data => [
                 Dict(
                     :x => timestamps(scaledAgcSignal),
-                    :y => get_values(scaledAgcSignal),
+                    :y => raw_vector(scaledAgcSignal),
                     :type => "interval",
                     :line => Dict(:dash => :dot),
                     :name => "AGC Signal",
                 ),
                 Dict(
                     :x => timestamps(actualRegPower),
-                    :y => get_values(actualRegPower),
+                    :y => raw_vector(actualRegPower),
                     :type => "interval",
                     :name => "Actual Power",
                 ),

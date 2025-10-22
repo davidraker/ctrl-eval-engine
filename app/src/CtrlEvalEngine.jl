@@ -4,15 +4,25 @@ using JSON
 using Dates
 
 export evaluate_controller,
+    Series,
+    PeriodSeries,
+    PointSeries,
     TimeSeries,
     FixedIntervalTimeSeries,
     VariableIntervalTimeSeries,
+    VariableIntervalPeriodTimeSeries,
+    VariableIntervalPointTimeSeries,
     RepeatedTimeSeries,
+    raw_vector,
+    TimeFrame,
+    TimeFrameRow,
     timestamps,
     get_values,
     start_time,
     end_time,
+    duration,
     sample,
+    upsample,
     integrate,
     cum_integrate,
     mean,
@@ -129,33 +139,18 @@ function update_progress!(progress::Progress, t::Dates.DateTime, setting::SimSet
 end
 
 function update_operation_history!(
-    opHistory::OperationHistory,
+    opHistory::TimeFrame,
     t::Dates.DateTime,
-    ess::EnergyStorageSystem,
-    powerKw::Real,
+    operatingPoint::NamedTuple,
 )
-    push!(opHistory.t, t)
-    push!(opHistory.powerKw, powerKw)
-    push!(opHistory.SOC, SOC(ess))
-    push!(opHistory.SOH, SOH(ess))
+    push!(opHistory, t, operatingPoint)
 end
 
 function update_schedule_history!(
-    scheduleHistory::ScheduleHistory,
-    currentSchedule::EnergyStorageScheduling.Schedule,
+    scheduleHistory::TimeFrame,
+    currentSchedule::TimeFrame,
 )
-    for schedulePeriod in currentSchedule
-        push!(scheduleHistory.t, end_time(schedulePeriod))
-        push!(
-            scheduleHistory.powerKw,
-            EnergyStorageScheduling.average_power(schedulePeriod),
-        )
-        push!(scheduleHistory.SOC, EnergyStorageScheduling.ending_soc(schedulePeriod))
-        push!(
-            scheduleHistory.regCapKw,
-            EnergyStorageScheduling.regulation_capacity(schedulePeriod),
-        )
-    end
+    append!(scheduleHistory, currentSchedule)
 end
 
 function update_schedule_period_progress!(
@@ -163,10 +158,10 @@ function update_schedule_period_progress!(
     actualPowerKw,
     duration::Dates.Period,
 )
-    if !isempty(spp.value) && spp.value[end] == actualPowerKw
+    if !isempty(spp.value) && spp.value.vec[end] == actualPowerKw
         spp.t[end] += duration
     else
-        push!(spp.value, actualPowerKw)
+        push!(spp.value.vec, actualPowerKw)
         push!(spp.t, spp.t[end] + duration)
     end
 end
@@ -182,27 +177,27 @@ function generate_chart_data(progress::Progress, useCases)
             :data => [
                 Dict(
                     :x => progress.schedule.t,
-                    :y => progress.schedule.powerKw,
+                    :y => column_data(progress.schedule, :powerKw),
                     :type => "interval",
                     :name => "Scheduled Power",
                 ),
                 Dict(
                     :x => progress.operation.t,
-                    :y => progress.operation.powerKw,
+                    :y => column_data(progress.operation, :powerKw),
                     :type => "interval",
                     :line => Dict(:dash => :dot),
                     :name => "Actual Power",
                 ),
                 Dict(
                     :x => progress.schedule.t,
-                    :y => progress.schedule.SOC,
+                    :y => column_data(progress.schedule, :SOC),
                     :type => "instance",
                     :name => "Scheduled SOC",
                     :yAxis => "right",
                 ),
                 Dict(
                     :x => progress.operation.t,
-                    :y => progress.operation.SOC,
+                    :y => column_data(progress.operation, :SOC),
                     :type => "instance",
                     :line => Dict(:dash => :dot),
                     :name => "Actual SOC",
@@ -211,7 +206,8 @@ function generate_chart_data(progress::Progress, useCases)
             ],
         ),
     ]
-    if progress.operation.SOH[1] - progress.operation.SOH[end] > 0.01
+    soh_data = column_data(progress.operation, :SOH)
+    if soh_data[1] - soh_data[end] > 0.01
         push!(
             defaultCharts,
             Dict(
@@ -222,7 +218,7 @@ function generate_chart_data(progress::Progress, useCases)
                 :data => [
                     Dict(
                         :x => progress.operation.t,
-                        :y => progress.operation.SOH,
+                        :y => soh_data,
                         :type => "instance",
                         :name => "ESS State of Health",
                     ),
@@ -262,8 +258,8 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
     t = setting.simStart
     progress = Progress(
         5.0,
-        ScheduleHistory([t], Float64[], Float64[SOC(ess)], Float64[]),
-        OperationHistory([t], Float64[], Float64[SOC(ess)], Float64[SOH(ess)]),
+        initialize_schedule_history(t, useCases),
+        initialize_operation_history(t, ess),
     )
     if debug
         @debug "Progress updated" t progress
@@ -272,14 +268,11 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
     end
     lastProgressUpdateTime = now()
 
-    outputProgress = Progress(
-        5.0,
-        ScheduleHistory([t], Float64[], Float64[SOC(ess)], Float64[]),
-        OperationHistory([t], Float64[], Float64[SOC(ess)], Float64[SOH(ess)]),
-    )
+    outputProgress = deepcopy(progress)
 
     while t < setting.simEnd
-        currentSchedule = EnergyStorageScheduling.schedule(ess, scheduler, useCases, t, outputProgress)
+        currentSchedule =
+            EnergyStorageScheduling.schedule(ess, scheduler, useCases, t, outputProgress)
         update_schedule_history!(outputProgress.schedule, currentSchedule)
         for schedulePeriod in currentSchedule
             schedulePeriodEnd = min(end_time(schedulePeriod), setting.simEnd)
@@ -289,7 +282,7 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
                     control(ess, rtController, schedulePeriod, useCases, t, spProgress)
                 for (powerSetpointKw, _, controlPeriodEnd) in controlSequence
                     controlDuration = controlPeriodEnd - t
-                    actualPowerKw = operate!(
+                    operatingPoint = operate!(
                         ess,
                         powerSetpointKw,
                         controlDuration,
@@ -297,16 +290,11 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
                     )
                     update_schedule_period_progress!(
                         spProgress,
-                        actualPowerKw,
+                        operatingPoint.powerKw,
                         controlDuration,
                     )
                     t += controlDuration
-                    update_operation_history!(
-                        outputProgress.operation,
-                        t,
-                        ess,
-                        actualPowerKw,
-                    )
+                    update_operation_history!(outputProgress.operation, t, operatingPoint)
                     if t > schedulePeriodEnd
                         break
                     end
