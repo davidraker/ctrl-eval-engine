@@ -71,8 +71,8 @@ function schedule(
                     :t => tStart,
                     :op_history => Dict(
                         :timestamps => progress.operation.t,
-                        :SOC_pu => progress.operation.SOC,
-                        :power_kW => progress.operation.powerKw,
+                        :SOC_pu => CtrlEvalEngine.column_data(progress.operation, :SOC),
+                        :power_kW => CtrlEvalEngine.column_data(progress.operation, :powerKw),
                     ),
                 ),
             ),
@@ -86,11 +86,24 @@ function schedule(
         error(scheduleDict["error"])
     end
 
+    power_kw = float.(scheduleDict["power_kW"])
+    soc_raw = float.(scheduleDict["SOC_pu"])
+    soc_full = if length(soc_raw) == length(power_kw) + 1
+        soc_raw
+    elseif length(soc_raw) == length(power_kw)
+        [SOC(ess), soc_raw...]
+    else
+        error(
+            "SOC_pu length must be either length(power_kW) or length(power_kW)+1. " *
+            "Got length(SOC_pu)=$(length(soc_raw)), length(power_kW)=$(length(power_kw))",
+        )
+    end
+
     return Schedule(
-        float.(scheduleDict["power_kW"]),
+        power_kw,
         tStart;
         resolution = Second(floor(Int, 3600 * get(scheduleDict, "resolution_hr", 1))),
-        SOC = [SOC(ess), float.(scheduleDict["SOC_pu"])...],
+        SOC = soc_full,
         regCapKw = scheduleDict["regulation_cap_kW"],
     )
 end
