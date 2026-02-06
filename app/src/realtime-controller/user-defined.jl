@@ -1,4 +1,5 @@
 
+using HTTP, HTTP.WebSockets, Sockets
 using JSON
 
 struct UserDefinedRTController <: RTController
@@ -41,7 +42,7 @@ function UserDefinedRTController(config::Dict, ess, useCases::AbstractVector{<:U
     )
     responseDict = JSON.parse(take!(chIn))
     if haskey(responseDict, "error") ||
-        get(responseDict, "message", nothing) !== "Initialized"
+       get(responseDict, "message", nothing) !== "Initialized"
         throw(
             CtrlEvalEngine.InitializationFailure(
                 get(
@@ -59,13 +60,11 @@ end
 function control(
     ess::EnergyStorageSystem,
     controller::UserDefinedRTController,
-    schedulePeriod::SchedulePeriod,
+    schedulePeriod::TimeFrameRow,
     useCases::AbstractVector{<:UseCase},
     t::Dates.DateTime,
     spProgress::VariableIntervalTimeSeries,
 )
-    @debug "UserDefinedRTController" t
-
     put!(
         controller.chOut,
         JSON.json(
@@ -75,8 +74,8 @@ function control(
                     :current_SOC_pu => SOC(ess),
                     :use_cases => useCases,
                     :t => t,
-                    :schedule_period => schedulePeriod,
-                    :schedule_period_progress => Dict(
+                    :history => Dict(
+                        :schedule_period => schedulePeriod,
                         :timestamps => timestamps(spProgress),
                         :power_kW => values(spProgress),
                     ),
@@ -85,13 +84,13 @@ function control(
         ),
     )
     controlSeqDict = JSON.parse(take!(controller.chIn))
-
+    @info "controlSeqDict:" controlSeqDict
     if haskey(controlSeqDict, "error")
         error(controlSeqDict["error"])
     end
 
     return FixedIntervalTimeSeries(
-        tStart,
+        t,
         Millisecond(floor(Int, 1000 * controlSeqDict["resolution_sec"])),
         float.(controlSeqDict["power_kW"]),
     )

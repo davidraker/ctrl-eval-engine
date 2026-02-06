@@ -166,7 +166,7 @@ function schedule(
         append!(sol_pBatt, zeros(scheduleLength - K))
     end
 
-    currentSchedule = Schedule(
+    currentSchedule = create_schedule(
         sol_pBatt[1:scheduleLength],
         tStart;
         resolution = scheduler.resolution,

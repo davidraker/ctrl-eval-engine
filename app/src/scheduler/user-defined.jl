@@ -1,4 +1,5 @@
 
+using HTTP, HTTP.WebSockets, Sockets
 using JSON
 
 struct UserDefinedScheduler <: Scheduler
@@ -69,7 +70,7 @@ function schedule(
                     :current_SOC_pu => SOC(ess),
                     :use_cases => useCases,
                     :t => tStart,
-                    :op_history => Dict(
+                    :history => Dict(
                         :timestamps => progress.operation.t,
                         :SOC_pu => CtrlEvalEngine.column_data(progress.operation, :SOC),
                         :power_kW => CtrlEvalEngine.column_data(progress.operation, :powerKw),
@@ -99,12 +100,18 @@ function schedule(
         )
     end
 
-    return Schedule(
+    reg_cap_raw = get(scheduleDict, "regulation_cap_kW", nothing)
+    reg_cap = reg_cap_raw === nothing ? nothing : float.(reg_cap_raw)
+    if reg_cap === nothing && any(uc -> uc isa Regulation, useCases)
+        reg_cap = zeros(length(power_kw))
+    end
+
+    return create_schedule(
         power_kw,
         tStart;
         resolution = Second(floor(Int, 3600 * get(scheduleDict, "resolution_hr", 1))),
         SOC = soc_full,
-        regCapKw = scheduleDict["regulation_cap_kW"],
+        regCapKw = reg_cap,
     )
 end
 

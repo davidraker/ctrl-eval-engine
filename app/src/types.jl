@@ -212,7 +212,11 @@ end
 
 Integrate `ts` from `tStart` to `tEnd` and return the result.
 """
-integrate(ts::TimeSeries) = sum(v * ((tEnd - tStart) / Hour(1)) for (v, tStart, tEnd) in ts)
+integrate(ts::TimeSeries{V,ST}) where {V,ST<:PeriodSeries{V}} =
+    sum(v * ((tEnd - tStart) / Hour(1)) for (v, tStart, tEnd) in ts)
+
+integrate(ts::TimeSeries{V,ST}) where {V,ST<:PointSeries{V}} =
+    sum((v[1] + v[2]) / 2 * ((tEnd - tStart) / Hour(1)) for (v, tStart, tEnd) in ts)
 
 integrate(ts::TimeSeries, tStart::DateTime, tEnd::DateTime) =
     integrate(extract(ts, tStart, tEnd))
@@ -222,10 +226,14 @@ integrate(ts::TimeSeries, tStart::DateTime, tEnd::DateTime) =
 
 Cumulatively integrate `ts` from `tStart` to `tEnd` and return the resultant `VariableIntervalTimeSeries`.
 """
-cum_integrate(ts::TimeSeries, tStart::DateTime, tEnd::DateTime) = begin
+cum_integrate(
+    ts::TimeSeries{V,ST},
+    tStart::DateTime,
+    tEnd::DateTime,
+) where {V,ST<:PeriodSeries{V}} = begin
     seg_integral = [v * ((t2 - t1) / Hour(1)) for (v, t1, t2) in extract(ts, tStart, tEnd)]
 
-    VariableIntervalTimeSeries(timestamps(ts), cumsum(seg_integral))
+    VariableIntervalTimeSeries(timestamps(ts), PointSeries(vcat([0], cumsum(seg_integral))))
 end
 
 cum_integrate(ts::TimeSeries) = cum_integrate(ts, start_time(ts), end_time(ts))
@@ -348,7 +356,7 @@ Calculate the standard deviation of `ts` during the time period from `t1` to `t2
 """
 std(ts::TimeSeries, t1::DateTime, t2::DateTime) = std(extract(ts, t1, t2))
 
-std(ts::TimeSeries) = begin
+std(ts::TimeSeries{V,ST}) where {V,ST<:PeriodSeries{V}} = begin
     diff = ts - mean(ts)
     sqrt(mean(diff^2))
 end

@@ -1,4 +1,5 @@
 
+using HTTP, HTTP.WebSockets, Sockets
 using JSON
 using ..CtrlEvalEngine: start_time, end_time
 
@@ -14,6 +15,7 @@ function AMAController(
     ess::EnergyStorageSystem,
     useCases::AbstractArray{<:UseCase},
 )
+    @info "Initializing AMAC"
     chIn = Channel{String}()
     chOut = Channel{String}()
     task = nothing
@@ -25,7 +27,7 @@ function AMAController(
         # pyAmac.set_data_interval(ucVM.pvGenProfile.resolution / Second(1))
 
         # simple websocket client
-        task = @async WebSockets.open("ws://localhost:6500") do ws
+        task = @async WebSockets.open("ws://localhost:6000") do ws
             # we can iterate the websocket
             # where each iteration yields a received message
             # iteration finishes when the websocket is closed
@@ -37,6 +39,8 @@ function AMAController(
             close(chIn)
         end
 
+
+        @info "Connection task created"
         essParameters = Dict(
             :rated_kw => p_max(ess),
             :rated_kwh => e_max(ess) - e_min(ess),
@@ -58,7 +62,11 @@ function AMAController(
                 ),
             ),
         )
+        @info "Initialization message sent"
+
         responseDict = JSON.parse(take!(chIn))
+        @info "Initialization response received"
+
         if haskey(responseDict, "error") ||
            get(responseDict, "message", nothing) !== "Initialized"
             throw(CtrlEvalEngine.InitializationFailure("AMAC failed to initialize"))
@@ -72,7 +80,7 @@ end
 function control(
     ess,
     amac::AMAController,
-    sp::SchedulePeriod,
+    sp::TimeFrameRow,
     useCases::AbstractArray{<:UseCase},
     t::DateTime,
     ::VariableIntervalTimeSeries,

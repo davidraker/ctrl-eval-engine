@@ -48,7 +48,6 @@ The schedule history contains time-series data of the planned ESS operation incl
 
   - `:powerKw`: Scheduled charging/discharging power (PeriodSeries) - always included
   - `:SOC`: Scheduled state of charge (SOC) (PointSeries) - always included
-  - `:regCapKw`: Regulation capacity (PeriodSeries) - always included
   - Additional use-case-specific columns as determined by each use case's `initialize_extra_schedules` method
 
 Each use case can contribute additional tracking columns (e.g., regulation capacity, peak demand)
@@ -75,10 +74,6 @@ function initialize_schedule_history(
         useCases;
         init = [(PeriodSeries{Float64}(), :powerKw), (PointSeries([initialSoc]), :SOC)],
     )
-
-    if !any(col -> col[2] == :regCapKw, scheduleColumns)
-        push!(scheduleColumns, (PeriodSeries{Float64}(), :regCapKw))
-    end
 
     allSeries = [col[1] for col in scheduleColumns]
     allHeaders = [col[2] for col in scheduleColumns]

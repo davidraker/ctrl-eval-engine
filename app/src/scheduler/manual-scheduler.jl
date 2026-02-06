@@ -10,7 +10,7 @@ end
 Schedule the operation of `ess` with `scheduler` given `useCases` starting from `tStart`
 """
 function schedule(ess, scheduler::ManualScheduler, _, tStart::Dates.DateTime, ::Progress)
-    currentSchedule = Schedule(
+    currentSchedule = create_schedule(
         max.(
             min.(scheduler.powerKw, p_max(ess, scheduler.resolution)),
             p_min(ess, scheduler.resolution),

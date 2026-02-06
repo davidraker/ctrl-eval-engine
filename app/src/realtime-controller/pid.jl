@@ -1,7 +1,7 @@
 using Dates, DiscretePIDs
 using CtrlEvalEngine.EnergyStorageSimulators
 using CtrlEvalEngine.EnergyStorageUseCases: UseCase, LoadFollowing
-using CtrlEvalEngine.EnergyStorageScheduling: SchedulePeriod
+using CtrlEvalEngine.EnergyStorageScheduling: create_schedule_period
 
 struct PIDController <: RTController
     resolution::Dates.Period
@@ -19,7 +19,7 @@ end
 function control(
     ess::EnergyStorageSystem,
     controller::PIDController,
-    schedulePeriod::SchedulePeriod,
+    schedulePeriod::TimeFrameRow,
     useCases::AbstractVector{<:UseCase},
     t::Dates.DateTime,
     spProgress::VariableIntervalTimeSeries,

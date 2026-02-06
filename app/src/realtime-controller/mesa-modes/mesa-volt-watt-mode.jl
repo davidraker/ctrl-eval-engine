@@ -14,7 +14,7 @@ function modecontrol(
     mode::VoltWattMode,
     ess::EnergyStorageSystem,
     controller::MesaController,
-    schedulePeriod::SchedulePeriod,
+    schedulePeriod::TimeFrameRow,
     useCases::AbstractVector{<:UseCase},
     t::Dates.DateTime,
     spProgress::VariableIntervalTimeSeries,

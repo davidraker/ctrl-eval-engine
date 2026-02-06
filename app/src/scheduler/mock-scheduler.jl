@@ -13,7 +13,7 @@ Schedule the operation of `ess` with `scheduler` given `useCases` starting from 
 function schedule(ess, scheduler::MockScheduler, _, tStart::Dates.DateTime, ::Progress)
     scheduleLength =
         Int(ceil(scheduler.interval, scheduler.resolution) / scheduler.resolution)
-    currentSchedule = Schedule(
+    currentSchedule = create_schedule(
         rand(scheduleLength) .*
         (p_max(ess, scheduler.interval) - p_min(ess, scheduler.interval)) .+
         p_min(ess, scheduler.interval),

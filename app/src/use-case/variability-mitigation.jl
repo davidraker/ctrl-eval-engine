@@ -97,14 +97,14 @@ use_case_charts(sh::TimeFrame, op::TimeFrame, ucVM::VariabilityMitigation) =
                 :data => [
                     Dict(
                         :x => timestamps(ucVM.pvGenProfile),
-                        :y => get_values(ucVM.pvGenProfile),
+                        :y => raw_vector(ucVM.pvGenProfile),
                         :type => "interval",
                         :name => "Original Power",
                         :line => Dict(:dash => :dash),
                     ),
                     Dict(
                         :x => timestamps(netPowerSmooth),
-                        :y => get_values(netPowerSmooth),
+                        :y => raw_vector(netPowerSmooth),
                         :type => "interval",
                         :name => "Smoothed Power",
                     ),
@@ -117,14 +117,14 @@ use_case_charts(sh::TimeFrame, op::TimeFrame, ucVM::VariabilityMitigation) =
                 :data => [
                     Dict(
                         :x => timestamps(originalVariability),
-                        :y => get_values(originalVariability),
+                        :y => raw_vector(originalVariability),
                         :type => "interval",
                         :name => "Original Variability",
                         :line => Dict(:dash => :dash),
                     ),
                     Dict(
                         :x => timestamps(smoothedVariability),
-                        :y => get_values(smoothedVariability),
+                        :y => raw_vector(smoothedVariability),
                         :type => "interval",
                         :name => "Smoothed Variability",
                     ),
