@@ -10,7 +10,7 @@ end
 
 Construct a `PeakLimiting` object from `input` dictionary or array
 """
-PeakLimiting(input::Dict) = PeakLimiting(
+PeakLimiting(input::AbstractDict) = PeakLimiting(
     input["peakThreshold"],
     FixedIntervalTimeSeries(
         DateTime(input["realtimePower"][1]["DateTime"]),

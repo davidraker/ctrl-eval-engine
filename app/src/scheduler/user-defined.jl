@@ -8,7 +8,7 @@ struct UserDefinedScheduler <: Scheduler
     task::Any
 end
 
-function UserDefinedScheduler(config::Dict, ess, useCases::AbstractVector{<:UseCase})
+function UserDefinedScheduler(config::AbstractDict, ess, useCases::AbstractVector{<:UseCase})
     chIn = Channel{String}()
     chOut = Channel{String}()
     # simple websocket client
@@ -72,8 +72,8 @@ function schedule(
                     :t => tStart,
                     :history => Dict(
                         :timestamps => progress.operation.t,
-                        :SOC_pu => progress.operation.SOC,
-                        :power_kW => progress.operation.powerKw,
+                        :SOC_pu => CtrlEvalEngine.column_data(progress.operation, :SOC),
+                        :power_kW => CtrlEvalEngine.column_data(progress.operation, :powerKw),
                     ),
                 ),
             ),
@@ -87,12 +87,31 @@ function schedule(
         error(scheduleDict["error"])
     end
 
+    power_kw = float.(scheduleDict["power_kW"])
+    soc_raw = float.(scheduleDict["SOC_pu"])
+    soc_full = if length(soc_raw) == length(power_kw) + 1
+        soc_raw
+    elseif length(soc_raw) == length(power_kw)
+        [SOC(ess), soc_raw...]
+    else
+        error(
+            "SOC_pu length must be either length(power_kW) or length(power_kW)+1. " *
+            "Got length(SOC_pu)=$(length(soc_raw)), length(power_kW)=$(length(power_kw))",
+        )
+    end
+
+    reg_cap_raw = get(scheduleDict, "regulation_cap_kW", nothing)
+    reg_cap = reg_cap_raw === nothing ? nothing : float.(reg_cap_raw)
+    if reg_cap === nothing && any(uc -> uc isa Regulation, useCases)
+        reg_cap = zeros(length(power_kw))
+    end
+
     return create_schedule(
-        float.(scheduleDict["power_kW"]),
+        power_kw,
         tStart;
         resolution = Second(floor(Int, 3600 * get(scheduleDict, "resolution_hr", 1))),
-        SOC = [SOC(ess), float.(scheduleDict["SOC_pu"])...],
-        regCapKw = scheduleDict["regulation_cap_kW"],
+        SOC = soc_full,
+        regCapKw = reg_cap,
     )
 end
 

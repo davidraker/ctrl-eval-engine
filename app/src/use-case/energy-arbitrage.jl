@@ -11,7 +11,7 @@ EnergyArbitrage(actualPrice::TimeSeries) = EnergyArbitrage(actualPrice, nothing)
 
 Construct an `EnergyArbitrage` object from `input` dictionary or array
 """
-EnergyArbitrage(input::Dict) = EnergyArbitrage(
+EnergyArbitrage(input::AbstractDict) = EnergyArbitrage(
     FixedIntervalTimeSeries(
         DateTime(input["actualEnergyPrice"]["Time"][1]),
         DateTime(input["actualEnergyPrice"]["Time"][2]) -
@@ -30,7 +30,7 @@ EnergyArbitrage(input::Dict) = EnergyArbitrage(
     end,
 )
 
-EnergyArbitrage(input::Dict, tStart::DateTime, tEnd::DateTime) = EnergyArbitrage(
+EnergyArbitrage(input::AbstractDict, tStart::DateTime, tEnd::DateTime) = EnergyArbitrage(
     extract(
         FixedIntervalTimeSeries(
             DateTime(input["actualEnergyPrice"]["Time"][1]),

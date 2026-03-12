@@ -8,7 +8,7 @@ struct RLScheduler <: Scheduler
     task::Any
 end
 
-function RLScheduler(res::Dates.Period, config::Dict, ess::EnergyStorageSystem)
+function RLScheduler(res::Dates.Period, config::AbstractDict, ess::EnergyStorageSystem)
     chIn = Channel{String}()
     chOut = Channel{String}()
     # simple websocket client

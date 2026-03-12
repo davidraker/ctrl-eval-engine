@@ -11,7 +11,7 @@ struct AMAController <: RTController
 end
 
 function AMAController(
-    controlConfig::Dict,
+    controlConfig::AbstractDict,
     ess::EnergyStorageSystem,
     useCases::AbstractArray{<:UseCase},
 )

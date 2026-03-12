@@ -44,7 +44,7 @@ struct TimeOfUseScheduler <: Scheduler
     rule_set::TimeOfUseRuleSet
 end
 
-TimeOfUseScheduler(resolution::Dates.Period, interval::Dates.Period, ruleSet::Dict) =
+TimeOfUseScheduler(resolution::Dates.Period, interval::Dates.Period, ruleSet::AbstractDict) =
     TimeOfUseScheduler(
         resolution,
         interval,

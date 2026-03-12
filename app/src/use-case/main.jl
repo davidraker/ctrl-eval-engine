@@ -175,7 +175,7 @@ include("peak-limiting.jl")
 include("generation-following.jl")
 include("demand-charge-reduction.jl")
 
-get_use_cases(inputDict::Dict, setting::SimSetting) = [
+get_use_cases(inputDict::AbstractDict, setting::SimSetting) = [
     if name === "Energy Arbitrage"
         EnergyArbitrage(config["data"], setting.simStart, setting.simEnd)
     elseif name === "Power Smoothing"

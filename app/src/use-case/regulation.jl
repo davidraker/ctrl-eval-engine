@@ -36,7 +36,7 @@ struct Regulation <: UseCase
     performanceScore::Float64
 end
 
-Regulation(input::Dict, tStart::DateTime, tEnd::DateTime) = begin
+Regulation(input::AbstractDict, tStart::DateTime, tEnd::DateTime) = begin
     agcSignalDict = input["data"]["agcSignal"]
     agcCore = FixedIntervalTimeSeries(
         DateTime(agcSignalDict["DateTime"][1]),
