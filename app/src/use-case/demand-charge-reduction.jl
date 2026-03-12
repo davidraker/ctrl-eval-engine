@@ -18,7 +18,7 @@ struct DemandChargeReduction <: UseCase
 end
 
 function DemandChargeReduction(
-    config::Dict,
+    config::AbstractDict,
     simStart::Dates.DateTime,
     simEnd::Dates.DateTime,
 )

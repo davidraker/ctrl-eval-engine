@@ -152,11 +152,11 @@ include("vrf-battery.jl")
 include("hydrogen-energy-storage.jl")
 
 """
-    get_ess(input::Dict)
+    get_ess(input::AbstractDict)
 
 Construct the appropriate EnergyStorageSystem object based on `input`
 """
-function get_ess(input::Dict)
+function get_ess(input::AbstractDict)
     try
         powerCapKw = if lowercase(input["powerCapacityUnit"]) == "kw"
             float(input["powerCapacityValue"])

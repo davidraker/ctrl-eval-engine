@@ -49,12 +49,12 @@ include("mesa.jl")
 include("user-defined.jl")
 
 """
-    get_rt_controller(inputDict::Dict, ess::EnergyStorageSystem, useCases::AbstractArray{<:UseCase})
+    get_rt_controller(inputDict::AbstractDict, ess::EnergyStorageSystem, useCases::AbstractArray{<:UseCase})
 
 Create a realtime controller of appropriate type from the input dictionary
 """
 function get_rt_controller(
-    config::Dict,
+    config::AbstractDict,
     ess::EnergyStorageSystem,
     useCases::AbstractArray{<:UseCase},
 )

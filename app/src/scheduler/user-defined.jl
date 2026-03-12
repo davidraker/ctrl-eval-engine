@@ -8,7 +8,7 @@ struct UserDefinedScheduler <: Scheduler
     task::Any
 end
 
-function UserDefinedScheduler(config::Dict, ess, useCases::AbstractVector{<:UseCase})
+function UserDefinedScheduler(config::AbstractDict, ess, useCases::AbstractVector{<:UseCase})
     chIn = Channel{String}()
     chOut = Channel{String}()
     # simple websocket client

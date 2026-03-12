@@ -4,11 +4,11 @@ struct RuleBasedScheduler <: Scheduler
     resolution::Dates.Period
     interval::Dates.Period
     curtailment_ratio::Float64
-    soc_thresholds::Dict
+    soc_thresholds::AbstractDict
     factor::Float64
 end
 
-RuleBasedScheduler(res::Dates.Period, interval::Dates.Period, config::Dict) =
+RuleBasedScheduler(res::Dates.Period, interval::Dates.Period, config::AbstractDict) =
     RuleBasedScheduler(
         res,
         interval,
@@ -120,7 +120,7 @@ function rlDcr(
     optimal_states::Vector{Float64},
     ess,
     curtailment_ratio::Float64,
-    soc_thresholds::Dict,
+    soc_thresholds::AbstractDict,
     factor::Float64 = 0.5,
 )
     peak_power = maximum(load)
