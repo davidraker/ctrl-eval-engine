@@ -77,7 +77,7 @@ function control(
                     :history => Dict(
                         :schedule_period => schedulePeriod,
                         :timestamps => timestamps(spProgress),
-                        :power_kW => values(spProgress),
+                        :power_kW => raw_vector(get_values(spProgress)),
                     ),
                 ),
             ),
