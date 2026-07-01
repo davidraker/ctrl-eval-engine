@@ -87,7 +87,7 @@ function control(
 )
     if amac.passive
         # Fall back to passive control according to schedule
-        return FixedIntervalTimeSeries(t, sp.duration, [sp.powerKw])
+        return FixedIntervalTimeSeries(t, end_time(sp) - t, [average_power(sp)])
     end
 
     idxVM = findfirst(uc -> uc isa VariabilityMitigation, useCases)
@@ -97,13 +97,13 @@ function control(
         return FixedIntervalTimeSeries(
             t,
             min(start_time(ucVM.pvGenProfile), end_time(sp)) - t,
-            [sp.powerKw],
+            [average_power(sp)],
         )
     end
 
     if t ≥ end_time(ucVM.pvGenProfile)
         # Passive control to the end of SchedulePeriod if PV generation profile has ended
-        return FixedIntervalTimeSeries(t, end_time(sp) - t, [sp.powerKw])
+        return FixedIntervalTimeSeries(t, end_time(sp) - t, [average_power(sp)])
     end
 
     # Active control if PV generation is present
@@ -116,14 +116,14 @@ function control(
             Dict(
                 :pvGen => currentPvGen,
                 :socPct => SOC(ess) * 100,
-                :refSocPct => sp.socEnd * 100,
+                :refSocPct => ending_soc(sp) * 100,
                 :t => t,
             ),
         ),
     )
     controlSeqDict = JSON.parse(take!(amac.chIn))
     battery_power = min(
-        max(p_min(ess, controlDuration), controlSeqDict["battery_power"] + sp.powerKw),
+        max(p_min(ess, controlDuration), controlSeqDict["battery_power"] + average_power(sp)),
         p_max(ess, controlDuration),
     )
     @debug "Active AMAC" t controlDuration maxlog = 20

@@ -128,8 +128,15 @@ function generate_output_dict(
     )
 
     @debug "Generating data for time-series charts" useCases
-    outputDict =
-        Dict(:metrics => metrics, :timeCharts => generate_chart_data(progress, useCases))
+    timeCharts = vcat(
+        generate_chart_data(progress, useCases),
+        EnergyStorageSimulators.bms_chart_data(ess, progress.operation),
+    )
+    outputDict = Dict{Symbol, Any}(:metrics => metrics, :timeCharts => timeCharts)
+    bmsOutput = EnergyStorageSimulators.bms_output(ess, progress.operation)
+    if bmsOutput !== nothing
+        outputDict[:bms] = bmsOutput
+    end
     return outputDict
 end
 
@@ -242,7 +249,7 @@ Evaluate the performance of the controller specified in `inputDict`
 function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
     @info "Parsing and validating input data"
     setting = get_setting(inputDict)
-    ess = get_ess(inputDict["selectedBatteryCharacteristics"])
+    ess = get_ess(inputDict["selectedBatteryCharacteristics"], inputDict)
     useCases = get_use_cases(inputDict["selectedUseCasesCharacteristics"], setting)
     scheduler = EnergyStorageScheduling.get_scheduler(
         inputDict["selectedControlTypeCharacteristics"]["scheduler"],
@@ -314,6 +321,7 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
 
     cleanup(scheduler)
     cleanup(rtController)
+    cleanup(ess)
 
     @debug "Generating output..."
     return generate_output_dict(outputProgress, useCases, ess)
