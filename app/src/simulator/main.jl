@@ -164,8 +164,17 @@ include("hydrogen-energy-storage.jl")
 
 Construct the appropriate EnergyStorageSystem object based on `input`
 """
-function get_ess(input::Dict, reportInput::Union{Dict,Nothing} = nothing)
+function get_ess(input::Dict, bmsController=nothing)
     try
+        cellSimulation = get(input, "cellSimulation", nothing)
+        cellSimulationEnabled =
+            cellSimulation isa Dict && get(cellSimulation, "enabled", false) === true
+        batteryType = get(input, "batteryType", "")
+        if cellSimulationEnabled &&
+           (batteryType == "lfp-lithium-ion" || batteryType == "nmc-lithium-ion")
+            return CellLevelLiIonBattery(string(batteryType), cellSimulation, bmsController)
+        end
+
         powerCapKw = if lowercase(input["powerCapacityUnit"]) == "kw"
             float(input["powerCapacityValue"])
         elseif lowercase(input["powerCapacityUnit"]) == "mw"
@@ -189,15 +198,8 @@ function get_ess(input::Dict, reportInput::Union{Dict,Nothing} = nothing)
 
         ηRT = float(input["roundtripEfficiency"])
 
-        cellSimulation =
-            reportInput === nothing ? nothing : get(reportInput, "cellSimulation", nothing)
-        bmsController =
-            reportInput === nothing ? nothing : get(reportInput, "bmsController", nothing)
-        cellSimulationEnabled =
-            cellSimulation isa Dict && get(cellSimulation, "enabled", false) === true
-
         ess = if input["batteryType"] == "lfp-lithium-ion"
-            baseEss = LiIonBattery(
+            LiIonBattery(
                 LFP_LiIonBatterySpecs(
                     powerCapKw,
                     energyCapKwh,
@@ -206,10 +208,8 @@ function get_ess(input::Dict, reportInput::Union{Dict,Nothing} = nothing)
                 ),
                 LiIonBatteryStates(0.5, 0),
             )
-            cellSimulationEnabled ?
-            CellLevelLiIonBattery(baseEss, input, cellSimulation, bmsController) : baseEss
         elseif input["batteryType"] == "nmc-lithium-ion"
-            baseEss = LiIonBattery(
+            LiIonBattery(
                 NMC_LiIonBatterySpecs(
                     powerCapKw,
                     energyCapKwh,
@@ -218,8 +218,6 @@ function get_ess(input::Dict, reportInput::Union{Dict,Nothing} = nothing)
                 ),
                 LiIonBatteryStates(0.5, 0),
             )
-            cellSimulationEnabled ?
-            CellLevelLiIonBattery(baseEss, input, cellSimulation, bmsController) : baseEss
         elseif input["batteryType"] == "vanadium-flow"
             VRFBattery(
                 VRFBatterySpecs(powerCapKw, energyCapKwh, ηRT),

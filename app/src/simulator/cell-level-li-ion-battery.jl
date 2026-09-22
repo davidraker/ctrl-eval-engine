@@ -4,8 +4,22 @@ using JSON
 const BMS_CONTROL_PORT = 7000
 const BMS_CONNECTION_ATTEMPTS = 30
 
+struct CellPackRatings
+    ns::Int
+    np::Int
+    nm::Int
+    q_cell_ah::Float64
+    v_cell_nom::Float64
+    c_max::Float64
+    soc_min::Float64
+    soc_max::Float64
+    e_full_kwh::Float64
+    p_rated_kw::Float64
+end
+
 mutable struct CellLevelLiIonBattery <: EnergyStorageSystem
-    base::LiIonBattery
+    ratings::CellPackRatings
+    eta_rt::Float64
     chIn::Channel{String}
     chOut::Channel{String}
     task::Any
@@ -14,6 +28,81 @@ mutable struct CellLevelLiIonBattery <: EnergyStorageSystem
     bmsSummary::Dict{String,Any}
     bmsConfig::Dict{String,Any}
     bmsRecordFields::Vector{String}
+end
+
+function cell_pack_energy_kwh(ns, np, nm, q_cell_ah, v_cell_nom)
+    float(ns) * float(np) * float(nm) * float(q_cell_ah) * float(v_cell_nom) / 1000
+end
+
+function _cell_number(dict, key, fallback)
+    value = dict isa Dict ? get(dict, key, fallback) : fallback
+    return value isa Real ? float(value) : float(fallback)
+end
+
+function cell_pack_ratings(cellSimulation::Dict, bmsController=nothing)
+    ns = max(1, round(Int, _cell_number(cellSimulation, "ns", 1)))
+    np = max(1, round(Int, _cell_number(cellSimulation, "np", 1)))
+    nm = max(1, round(Int, _cell_number(cellSimulation, "nm", 1)))
+    q_cell_ah = _cell_number(cellSimulation, "q_cell_ah", 50.0)
+    v_cell_nom = _cell_number(cellSimulation, "v_cell_nom", 3.7)
+    c_max = _cell_number(cellSimulation, "C_max", 1.0)
+    constraints =
+        bmsController isa Dict ? get(bmsController, "constraints", Dict()) : Dict()
+    soc_min = _cell_number(constraints, "soc_min", 0.0)
+    soc_max = _cell_number(constraints, "soc_max", 1.0)
+    e_full = cell_pack_energy_kwh(ns, np, nm, q_cell_ah, v_cell_nom)
+    CellPackRatings(ns, np, nm, q_cell_ah, v_cell_nom, c_max, soc_min, soc_max, e_full, c_max * e_full)
+end
+
+const _BMS_STATE_KEYS = (
+    "powerKw",
+    "SOC",
+    "SOH",
+    "etaRt",
+    "cellVMin",
+    "cellVMax",
+    "cellVAvg",
+    "cellSocMin",
+    "cellSocMax",
+    "cellSocAvg",
+    "cellSocStd",
+    "cellTempMin",
+    "cellTempMax",
+    "cellTempAvg",
+    "cellBalancingEnergyWh",
+    "cellCapacityFadeAvg",
+    "cellResistanceGrowthAvg",
+)
+
+function _merge_bms_state!(state::Dict, responseDict)
+    for key in _BMS_STATE_KEYS
+        if haskey(responseDict, key)
+            state[key] = responseDict[key]
+        end
+    end
+    return state
+end
+
+function _bms_nested(responseDict, key, fallback)
+    if haskey(responseDict, key)
+        return responseDict[key]
+    end
+    state = get(responseDict, "state", nothing)
+    if state isa Dict && haskey(state, key)
+        return state[key]
+    end
+    return fallback
+end
+
+function bms_compute_payload(powerKw, durationHour, temperatureDegreeC)
+    Dict(
+        :type => "compute",
+        :payload => Dict(
+            :power_kw => powerKw,
+            :duration_s => durationHour * 3600,
+            :ambient_temp_c => temperatureDegreeC,
+        ),
+    )
 end
 
 function _start_bms_connection(chIn::Channel{String}, chOut::Channel{String})
@@ -61,17 +150,16 @@ function _bms_state_float(
     return value isa Real ? float(value) : float(fallback)
 end
 
-function _bms_initial_state(base::LiIonBattery)
+function _bms_initial_state()
     Dict{String,Any}(
         "powerKw" => 0.0,
-        "SOC" => SOC(base),
-        "SOH" => SOH(base),
+        "SOC" => 0.5,
+        "SOH" => 1.0,
     )
 end
 
 function CellLevelLiIonBattery(
-    base::LiIonBattery,
-    batteryConfig::Dict,
+    batteryType::AbstractString,
     cellSimulation::Dict,
     bmsController,
 )
@@ -79,20 +167,17 @@ function CellLevelLiIonBattery(
     chOut = Channel{String}(1)
     task = _start_bms_connection(chIn, chOut)
 
+    ratings = cell_pack_ratings(cellSimulation, bmsController)
     initPayload = Dict(
         :type => "initialize",
         :payload => Dict(
             :type => "bms",
-            :selectedBatteryCharacteristics => batteryConfig,
+            :selectedBatteryCharacteristics => Dict("batteryType" => batteryType),
             :cellSimulation => cellSimulation,
             :bmsController => bmsController === nothing ? Dict() : bmsController,
             :ess => Dict(
-                :e_max_kWh => e_max(base),
-                :e_min_kWh => e_min(base),
-                :p_max_kW => p_max(base),
-                :RTE_pu => ηRT(base),
-                :initial_SOC_pu => SOC(base),
-                :initial_SOH_pu => SOH(base),
+                :initial_SOC_pu => 0.5,
+                :initial_SOH_pu => 1.0,
             ),
         ),
     )
@@ -108,17 +193,21 @@ function CellLevelLiIonBattery(
         )
     end
 
-    state = _bms_initial_state(base)
+    state = _bms_initial_state()
     if get(responseDict, "state", nothing) isa Dict
-        merge!(state, responseDict["state"])
+        _merge_bms_state!(state, responseDict["state"])
     end
+    _merge_bms_state!(state, responseDict)
 
-    bmsSummary = get(responseDict, "bmsSummary", Dict{String,Any}())
-    bmsConfig = get(responseDict, "bmsConfig", Dict{String,Any}())
-    bmsRecordFields = get(responseDict, "bmsRecordFields", String[])
+    bmsSummary = _bms_nested(responseDict, "bmsSummary", Dict{String,Any}())
+    bmsConfig = _bms_nested(responseDict, "bmsConfig", Dict{String,Any}())
+    bmsRecordFields = _bms_nested(responseDict, "bmsRecordFields", String[])
+    etaRt = _bms_nested(responseDict, "etaRt", 1.0)
+    etaRt = etaRt isa Real ? float(etaRt) : 1.0
 
     return CellLevelLiIonBattery(
-        base,
+        ratings,
+        etaRt,
         chIn,
         chOut,
         task,
@@ -130,27 +219,38 @@ function CellLevelLiIonBattery(
     )
 end
 
-ηRT(ess::CellLevelLiIonBattery) = ηRT(ess.base)
-self_discharge_rate(ess::CellLevelLiIonBattery) = self_discharge_rate(ess.base)
-SOC(ess::CellLevelLiIonBattery) = _bms_state_float(ess, "SOC", SOC(ess.base))
-SOH(ess::CellLevelLiIonBattery) = _bms_state_float(ess, "SOH", SOH(ess.base))
+ηRT(ess::CellLevelLiIonBattery) = ess.eta_rt
+self_discharge_rate(::CellLevelLiIonBattery) = 0.0
+SOC(ess::CellLevelLiIonBattery) = _bms_state_float(ess, "SOC", 0.5)
+SOH(ess::CellLevelLiIonBattery) = _bms_state_float(ess, "SOH", 1.0)
 energy_state(ess::CellLevelLiIonBattery) = SOC(ess) * e_max(ess)
-e_max(ess::CellLevelLiIonBattery) = e_max(ess.base)
-e_min(ess::CellLevelLiIonBattery) = e_min(ess.base)
-p_max(ess::CellLevelLiIonBattery) = p_max(ess.base)
-p_min(ess::CellLevelLiIonBattery) = p_min(ess.base)
+e_max(ess::CellLevelLiIonBattery) = ess.ratings.e_full_kwh
+e_min(::CellLevelLiIonBattery) = 0.0
+p_max(ess::CellLevelLiIonBattery) = ess.ratings.p_rated_kw
+p_min(ess::CellLevelLiIonBattery) = -ess.ratings.p_rated_kw
 
-p_max(
-    ess::CellLevelLiIonBattery,
-    durationHour::Real,
-    ambientTemperatureDegreeC::Real,
-) = p_max(ess.base)
+function _duration_discharge_kw(ess::CellLevelLiIonBattery, durationHour::Real)
+    durationHour = float(durationHour)
+    if durationHour <= 0
+        return p_max(ess)
+    end
+    headroom = max(SOC(ess) - ess.ratings.soc_min, 0.0) * e_max(ess) / durationHour
+    return min(p_max(ess), headroom)
+end
 
-p_min(
-    ess::CellLevelLiIonBattery,
-    durationHour::Real,
-    ambientTemperatureDegreeC::Real,
-) = p_min(ess.base)
+function _duration_charge_kw(ess::CellLevelLiIonBattery, durationHour::Real)
+    durationHour = float(durationHour)
+    if durationHour <= 0
+        return p_min(ess)
+    end
+    headroom = max(ess.ratings.soc_max - SOC(ess), 0.0) * e_max(ess) / durationHour
+    return max(p_min(ess), -headroom)
+end
+
+p_max(ess::CellLevelLiIonBattery, durationHour::Real, ::Real) =
+    _duration_discharge_kw(ess, durationHour)
+p_min(ess::CellLevelLiIonBattery, durationHour::Real, ::Real) =
+    _duration_charge_kw(ess, durationHour)
 
 function _operate!(
     ess::CellLevelLiIonBattery,
@@ -158,25 +258,16 @@ function _operate!(
     durationHour::Real,
     temperatureDegreeC::Real,
 )
-    put!(
-        ess.chOut,
-        JSON.json(
-            Dict(
-                :type => "compute",
-                :payload => Dict(
-                    :power_kw => powerKw,
-                    :duration_s => durationHour * 3600,
-                    :ambient_temp_c => temperatureDegreeC,
-                ),
-            ),
-        ),
-    )
+    put!(ess.chOut, JSON.json(bms_compute_payload(powerKw, durationHour, temperatureDegreeC)))
     responseDict = JSON.parse(take!(ess.chIn); dicttype = Dict)
     if haskey(responseDict, "error")
         error(responseDict["error"])
     end
 
-    merge!(ess.state, responseDict)
+    _merge_bms_state!(ess.state, responseDict)
+    if haskey(responseDict, "etaRt") && responseDict["etaRt"] isa Real
+        ess.eta_rt = float(responseDict["etaRt"])
+    end
     bmsRecords = get(responseDict, "bmsRecords", nothing)
     if bmsRecords isa Vector
         for record in bmsRecords
@@ -279,19 +370,19 @@ function bms_chart_data(ess::CellLevelLiIonBattery, operation::TimeFrame)
             :height => "400px",
             :xAxis => Dict(:title => "Time"),
             :yAxisLeft => Dict(:title => "Power (kW)"),
-            :yAxisRight => Dict(:title => "Current (A)"),
+            :yAxisRight => Dict(:title => "Module current (A)"),
             :data => [
                 Dict(
                     :x => x,
-                    :y => _bms_series(records, "pack_power_kw"),
+                    :y => _bms_series(records, "pack_power_kw"; scale = float(ess.ratings.nm)),
                     :type => "instance",
-                    :name => "Pack Power",
+                    :name => "Plant Power",
                 ),
                 Dict(
                     :x => x,
                     :y => _bms_series(records, "pack_current"),
                     :type => "instance",
-                    :name => "Pack Current",
+                    :name => "Module Current",
                     :yAxis => "right",
                 ),
             ],

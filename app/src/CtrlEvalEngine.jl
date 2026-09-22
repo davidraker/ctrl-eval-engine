@@ -249,7 +249,10 @@ Evaluate the performance of the controller specified in `inputDict`
 function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
     @info "Parsing and validating input data"
     setting = get_setting(inputDict)
-    ess = get_ess(inputDict["selectedBatteryCharacteristics"], inputDict)
+    ess = get_ess(
+        inputDict["selectedBatteryCharacteristics"],
+        get(inputDict, "bmsController", nothing),
+    )
     useCases = get_use_cases(inputDict["selectedUseCasesCharacteristics"], setting)
     scheduler = EnergyStorageScheduling.get_scheduler(
         inputDict["selectedControlTypeCharacteristics"]["scheduler"],
