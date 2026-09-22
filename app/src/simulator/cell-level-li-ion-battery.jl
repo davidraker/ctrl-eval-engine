@@ -409,7 +409,6 @@ end
 
 function append_cell_steps!(
     operation::TimeFrame,
-    tEnd::DateTime,
     result::CellLevelResult,
 )
     if isempty(result.steps)

@@ -150,10 +150,10 @@ end
 
 function update_operation_history!(
     opHistory::TimeFrame,
-    tEnd::Dates.DateTime,
+    ::Dates.DateTime,
     result::EnergyStorageSimulators.CellLevelResult,
 )
-    EnergyStorageSimulators.append_cell_steps!(opHistory, tEnd, result)
+    EnergyStorageSimulators.append_cell_steps!(opHistory, result)
 end
 
 function update_schedule_history!(
