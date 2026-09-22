@@ -1,5 +1,6 @@
 stages:
   - build
+  - promote
 
 variables:
   AWS_REGION: us-west-2
@@ -13,11 +14,38 @@ build_test_push:
     - aws
     - instance
   script:
-    - docker build -t "${IMAGE_URI}:${CI_COMMIT_BRANCH}" "${CI_PROJECT_DIR}"
+    - docker build -t "${IMAGE_URI}:${CI_COMMIT_BRANCH}" .
     - docker run --rm "${IMAGE_URI}:${CI_COMMIT_BRANCH}" julia --project=. -e 'using Pkg; Pkg.test()'
     - aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
     - docker push "${IMAGE_URI}:${CI_COMMIT_BRANCH}"
   rules:
     - if: $CI_COMMIT_BRANCH == 'development'
+
+retag:
+  stage: promote
+  tags:
+    - aws
+    - instance
+  script:
+    - >
+      aws ecr batch-get-image
+      --region "${AWS_REGION}"
+      --repository-name "${IMAGE_REPO}"
+      --image-ids imageTag="${SRC_TAG}"
+      --query 'images[0].imageManifest'
+      --output text > image-manifest.json
+    - >
+      aws ecr put-image
+      --region "${AWS_REGION}"
+      --repository-name "${IMAGE_REPO}"
+      --image-tag "${DST_TAG}"
+      --image-manifest file://image-manifest.json
+  rules:
     - if: $CI_COMMIT_BRANCH == 'staging'
+      variables:
+        SRC_TAG: development
+        DST_TAG: staging
     - if: $CI_COMMIT_BRANCH == 'main'
+      variables:
+        SRC_TAG: staging
+        DST_TAG: main
