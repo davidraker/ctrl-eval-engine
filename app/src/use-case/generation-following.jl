@@ -10,7 +10,7 @@ end
 
 Construct a `GenerationFollowing` object from `input` dictionary or array
 """
-GenerationFollowing(input::Dict) = GenerationFollowing(
+GenerationFollowing(input::AbstractDict) = GenerationFollowing(
     FixedIntervalTimeSeries(
         DateTime(input["forecastGenProfile"]["DateTime"][1]),
         DateTime(input["forecastGenProfile"]["DateTime"][2]) -
@@ -25,7 +25,7 @@ GenerationFollowing(input::Dict) = GenerationFollowing(
     ),
 )
 
-GenerationFollowing(input::Dict, tStart::DateTime, tEnd::DateTime) = GenerationFollowing(
+GenerationFollowing(input::AbstractDict, tStart::DateTime, tEnd::DateTime) = GenerationFollowing(
     extract(
         FixedIntervalTimeSeries(
             DateTime(input["forecastGenProfile"]["DateTime"][1]),

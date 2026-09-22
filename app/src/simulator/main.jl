@@ -154,11 +154,11 @@ include("vrf-battery.jl")
 include("hydrogen-energy-storage.jl")
 
 """
-    get_ess(input::Dict)
+    get_ess(input::AbstractDict, bmsController=nothing)
 
-Construct the appropriate EnergyStorageSystem object based on `input`
+Construct the appropriate EnergyStorageSystem object based on `input` and, if cell-level simulation is on, `bmsController`
 """
-function get_ess(input::Dict, bmsController=nothing)
+function get_ess(input::AbstractDict, bmsController=nothing)
     try
         cellSimulation = get(input, "cellSimulation", nothing)
         cellSimulationEnabled =

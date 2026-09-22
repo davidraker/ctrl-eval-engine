@@ -38,7 +38,7 @@ include("types.jl")
 
 cleanup(::Any) = nothing
 
-function get_setting(inputDict::Dict)
+function get_setting(inputDict::AbstractDict)
     simStart = Dates.DateTime(inputDict["simStart"])
     simEnd = Dates.DateTime(inputDict["simEnd"])
     temperature =
@@ -253,21 +253,28 @@ Evaluate the performance of the controller specified in `inputDict`
 function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
     @info "Parsing and validating input data"
     setting = get_setting(inputDict)
+    @debug "Settings parsed successfully" startTime=setting.simStart endTime=setting.simEnd
+    
     ess = get_ess(
         inputDict["selectedBatteryCharacteristics"],
         get(inputDict, "bmsController", nothing),
     )
+    @debug "ESS characteristics parsed successfully" ess
+
     useCases = get_use_cases(inputDict["selectedUseCasesCharacteristics"], setting)
+    @debug "Use cases parsed successfully" useCases
     scheduler = EnergyStorageScheduling.get_scheduler(
         inputDict["selectedControlTypeCharacteristics"]["scheduler"],
         ess,
         useCases,
     )
+    @debug "Scheduler initialized successfully" scheduler
     rtController = EnergyStorageRTControl.get_rt_controller(
         inputDict["selectedControlTypeCharacteristics"]["rtController"],
         ess,
         useCases,
     )
+    @debug "RT Controller initialized successfully" rtController
 
     t = setting.simStart
     progress = Progress(

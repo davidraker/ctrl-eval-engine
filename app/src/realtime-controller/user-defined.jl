@@ -8,7 +8,7 @@ struct UserDefinedRTController <: RTController
     task::Any
 end
 
-function UserDefinedRTController(config::Dict, ess, useCases::AbstractVector{<:UseCase})
+function UserDefinedRTController(config::AbstractDict, ess, useCases::AbstractVector{<:UseCase})
     chIn = Channel{String}()
     chOut = Channel{String}()
     # simple websocket client
@@ -77,14 +77,14 @@ function control(
                     :history => Dict(
                         :schedule_period => schedulePeriod,
                         :timestamps => timestamps(spProgress),
-                        :power_kW => values(spProgress),
+                        :power_kW => raw_vector(get_values(spProgress)),
                     ),
                 ),
             ),
         ),
     )
     controlSeqDict = JSON.parse(take!(controller.chIn))
-    @info "controlSeqDict:" controlSeqDict
+    @debug "In control()" controlSeqDict
     if haskey(controlSeqDict, "error")
         error(controlSeqDict["error"])
     end

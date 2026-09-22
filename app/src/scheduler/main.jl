@@ -70,12 +70,12 @@ schedule(
 ) = create_schedule([0.0], tStart; resolution = scheduler.interval, SOC = [SOC(ess), SOC(ess)])
 
 """
-    get_scheduler(inputDict::Dict)
+    get_scheduler(inputDict::AbstractDict)
 
 Create a scheduler of appropriate type from the input dictionary
 """
 function get_scheduler(
-    schedulerConfig::Dict,
+    schedulerConfig::AbstractDict,
     ess::EnergyStorageSystem,
     useCases::AbstractArray{<:UseCase},
 )

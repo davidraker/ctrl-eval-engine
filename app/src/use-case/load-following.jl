@@ -26,7 +26,7 @@ end
 
 Construct a `LoadFollowing` object from `input` dictionary or array
 """
-LoadFollowing(input::Dict) = LoadFollowing(
+LoadFollowing(input::AbstractDict) = LoadFollowing(
     FixedIntervalTimeSeries(
         DateTime(input["forecastLoadPower"]["DateTime"][1]),
         DateTime(input["forecastLoadPower"]["DateTime"][2]) -
@@ -41,7 +41,7 @@ LoadFollowing(input::Dict) = LoadFollowing(
     ),
 )
 
-LoadFollowing(input::Dict, tStart::DateTime, tEnd::DateTime) = LoadFollowing(
+LoadFollowing(input::AbstractDict, tStart::DateTime, tEnd::DateTime) = LoadFollowing(
     extract(
         FixedIntervalTimeSeries(
             DateTime(input["forecastLoadProfile"]["DateTime"][1]),

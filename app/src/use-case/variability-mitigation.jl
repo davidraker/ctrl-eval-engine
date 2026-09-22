@@ -9,7 +9,7 @@ end
 
 Construct an `VariabilityMitigation` object from `input` dictionary or array
 """
-VariabilityMitigation(config::Dict) = VariabilityMitigation(
+VariabilityMitigation(config::AbstractDict) = VariabilityMitigation(
     FixedIntervalTimeSeries(
         DateTime(config["pvGenProfile"]["DateTime"][1]),
         DateTime(config["pvGenProfile"]["DateTime"][2]) -
@@ -19,7 +19,7 @@ VariabilityMitigation(config::Dict) = VariabilityMitigation(
     config["ratedPowerKw"],
 )
 
-VariabilityMitigation(config::Dict, tStart::DateTime, tEnd::DateTime) =
+VariabilityMitigation(config::AbstractDict, tStart::DateTime, tEnd::DateTime) =
     VariabilityMitigation(
         extract(
             FixedIntervalTimeSeries(
