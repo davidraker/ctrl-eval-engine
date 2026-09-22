@@ -129,6 +129,15 @@ function get_scheduler(
             RLScheduler(res, schedulerConfig, ess)
         elseif schedulerType == "idle"
             IdleScheduler(Hour(24))
+        elseif schedulerType == "manual" || schedulerType == "manualScheduler"
+            res = Minute(
+                round(
+                    Int,
+                    convert(Minute, Hour(1)).value *
+                    get(schedulerConfig, "scheduleResolutionHrs", 1),
+                ),
+            )
+            ManualScheduler(float.(schedulerConfig["powerKw"]), Dates.DateTime(2000, 1, 1), res)
         elseif schedulerType == "rule"
             res = Minute(
                 round(

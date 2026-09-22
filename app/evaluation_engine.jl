@@ -9,12 +9,15 @@ BUCKET_NAME = get(ENV, "BUCKET_NAME", "long-running-jobs-test")
 inputDict, debug, JOB_ID = if length(ARGS) == 1
     inputJobId = ARGS[1]
     (
-        JSON.parse(IOBuffer(read(S3Path("s3://$BUCKET_NAME/input/$inputJobId.json")))),
+        JSON.parse(
+            IOBuffer(read(S3Path("s3://$BUCKET_NAME/input/$inputJobId.json")));
+            dicttype = Dict,
+        ),
         false,
         inputJobId,
     )
 elseif length(ARGS) == 2 && ARGS[1] == "debug"
-    (JSON.parsefile(ARGS[2]), true, nothing)
+    (JSON.parsefile(ARGS[2]; dicttype = Dict), true, nothing)
 else
     @error "Unsupported command line arguments" ARGS
     exit(1)

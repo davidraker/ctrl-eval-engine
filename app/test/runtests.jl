@@ -9,6 +9,7 @@ using CtrlEvalEngine
 include("timeseries-tests.jl")
 include("input-tests.jl")
 include("simulator-tests.jl")
+include("cell-level-tests.jl")
 include("use-case-tests.jl")
 include("scheduler-tests.jl")
 include("controller-tests.jl")

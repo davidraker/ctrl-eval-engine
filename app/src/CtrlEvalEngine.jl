@@ -128,8 +128,10 @@ function generate_output_dict(
     )
 
     @debug "Generating data for time-series charts" useCases
-    outputDict =
-        Dict(:metrics => metrics, :timeCharts => generate_chart_data(progress, useCases))
+    outputDict = Dict{Symbol,Any}(
+        :metrics => metrics,
+        :timeCharts => generate_chart_data(progress, useCases),
+    )
     return outputDict
 end
 
@@ -144,6 +146,14 @@ function update_operation_history!(
     operatingPoint::NamedTuple,
 )
     push!(opHistory, t, operatingPoint)
+end
+
+function update_operation_history!(
+    opHistory::TimeFrame,
+    ::Dates.DateTime,
+    result::EnergyStorageSimulators.CellLevelResult,
+)
+    EnergyStorageSimulators.append_cell_steps!(opHistory, result)
 end
 
 function update_schedule_history!(
@@ -226,12 +236,13 @@ function generate_chart_data(progress::Progress, useCases)
             ),
         )
     end
-    mapreduce(
+    charts = mapreduce(
         uc -> use_case_charts(progress.schedule, progress.operation, uc),
         vcat,
         useCases;
         init = defaultCharts,
     )
+    return vcat(charts, EnergyStorageSimulators.cell_level_charts(progress.operation))
 end
 
 """
@@ -243,8 +254,13 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
     @info "Parsing and validating input data"
     setting = get_setting(inputDict)
     @debug "Settings parsed successfully" startTime=setting.simStart endTime=setting.simEnd
-    ess = get_ess(inputDict["selectedBatteryCharacteristics"])
+    
+    ess = get_ess(
+        inputDict["selectedBatteryCharacteristics"],
+        get(inputDict, "bmsController", nothing),
+    )
     @debug "ESS characteristics parsed successfully" ess
+
     useCases = get_use_cases(inputDict["selectedUseCasesCharacteristics"], setting)
     @debug "Use cases parsed successfully" useCases
     scheduler = EnergyStorageScheduling.get_scheduler(
@@ -319,6 +335,7 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
 
     cleanup(scheduler)
     cleanup(rtController)
+    cleanup(ess)
 
     @debug "Generating output..."
     return generate_output_dict(outputProgress, useCases, ess)

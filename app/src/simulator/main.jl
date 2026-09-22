@@ -10,6 +10,7 @@ using Dates
 export EnergyStorageSystem,
     MockSimulator,
     LiIonBattery,
+    CellLevelLiIonBattery,
     VRFBattery,
     HydrogenEnergyStorageSystem,
     operate!,
@@ -148,16 +149,26 @@ initialize_extra_operations(::EnergyStorageSystem) = (Series[], Symbol[])
 
 include("mock-simulator.jl")
 include("li-ion-battery.jl")
+include("cell-level-li-ion-battery.jl")
 include("vrf-battery.jl")
 include("hydrogen-energy-storage.jl")
 
 """
-    get_ess(input::AbstractDict)
+    get_ess(input::AbstractDict, bmsController=nothing)
 
-Construct the appropriate EnergyStorageSystem object based on `input`
+Construct the appropriate EnergyStorageSystem object based on `input` and, if cell-level simulation is on, `bmsController`
 """
-function get_ess(input::AbstractDict)
+function get_ess(input::AbstractDict, bmsController=nothing)
     try
+        cellSimulation = get(input, "cellSimulation", nothing)
+        cellSimulationEnabled =
+            cellSimulation isa Dict && get(cellSimulation, "enabled", false) === true
+        batteryType = get(input, "batteryType", "")
+        if cellSimulationEnabled &&
+           (batteryType == "lfp-lithium-ion" || batteryType == "nmc-lithium-ion")
+            return CellLevelLiIonBattery(string(batteryType), cellSimulation, bmsController)
+        end
+
         powerCapKw = if lowercase(input["powerCapacityUnit"]) == "kw"
             float(input["powerCapacityValue"])
         elseif lowercase(input["powerCapacityUnit"]) == "mw"
