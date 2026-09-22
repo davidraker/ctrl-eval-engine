@@ -128,15 +128,10 @@ function generate_output_dict(
     )
 
     @debug "Generating data for time-series charts" useCases
-    timeCharts = vcat(
-        generate_chart_data(progress, useCases),
-        EnergyStorageSimulators.bms_chart_data(ess, progress.operation),
+    outputDict = Dict{Symbol,Any}(
+        :metrics => metrics,
+        :timeCharts => generate_chart_data(progress, useCases),
     )
-    outputDict = Dict{Symbol, Any}(:metrics => metrics, :timeCharts => timeCharts)
-    bmsOutput = EnergyStorageSimulators.bms_output(ess, progress.operation)
-    if bmsOutput !== nothing
-        outputDict[:bms] = bmsOutput
-    end
     return outputDict
 end
 
@@ -151,6 +146,14 @@ function update_operation_history!(
     operatingPoint::NamedTuple,
 )
     push!(opHistory, t, operatingPoint)
+end
+
+function update_operation_history!(
+    opHistory::TimeFrame,
+    tEnd::Dates.DateTime,
+    result::EnergyStorageSimulators.CellLevelResult,
+)
+    EnergyStorageSimulators.append_cell_steps!(opHistory, tEnd, result)
 end
 
 function update_schedule_history!(
@@ -233,12 +236,13 @@ function generate_chart_data(progress::Progress, useCases)
             ),
         )
     end
-    mapreduce(
+    charts = mapreduce(
         uc -> use_case_charts(progress.schedule, progress.operation, uc),
         vcat,
         useCases;
         init = defaultCharts,
     )
+    return vcat(charts, EnergyStorageSimulators.cell_level_charts(progress.operation))
 end
 
 """

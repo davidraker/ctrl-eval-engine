@@ -23,8 +23,6 @@ export EnergyStorageSystem,
     e_max,
     e_min,
     energy_state,
-    bms_output,
-    bms_chart_data,
     ηRT,
     self_discharge_rate,
     H2_KWH_PER_KG
@@ -148,10 +146,6 @@ A tuple `(seriesVector, headersVector)` where:
   - `headersVector`: Vector of `Symbol` headers corresponding to the series
 """
 initialize_extra_operations(::EnergyStorageSystem) = (Series[], Symbol[])
-
-bms_output(::EnergyStorageSystem, ::TimeFrame) = nothing
-
-bms_chart_data(::EnergyStorageSystem, ::TimeFrame) = Any[]
 
 include("mock-simulator.jl")
 include("li-ion-battery.jl")

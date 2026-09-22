@@ -4,7 +4,7 @@ using JSON
 const BMS_CONTROL_PORT = 7000
 const BMS_CONNECTION_ATTEMPTS = 30
 
-struct CellPackRatings
+struct CellModuleRatings
     ns::Int
     np::Int
     nm::Int
@@ -17,20 +17,80 @@ struct CellPackRatings
     p_rated_kw::Float64
 end
 
-mutable struct CellLevelLiIonBattery <: EnergyStorageSystem
-    ratings::CellPackRatings
+mutable struct CellLevelStates
+    powerKw::Float64
+    SOC::Float64
+    SOH::Float64
     eta_rt::Float64
+end
+
+struct CellStep
+    elapsedS::Float64
+    powerKw::Float64
+    SOC::Float64
+    SOH::Float64
+    cellSocMin::Float64
+    cellSocMax::Float64
+    cellVMin::Float64
+    cellVMax::Float64
+    cellVAvg::Float64
+    moduleVoltage::Float64
+    tempMin::Float64
+    tempMax::Float64
+    tempAvg::Float64
+    moduleCurrentA::Float64
+    nCellsBalancing::Float64
+    capFadeAvg::Float64
+    calFadeAvg::Float64
+    cycFadeAvg::Float64
+    capFadeSpread::Float64
+    sohMin::Float64
+    resGrowthAvg::Float64
+    calResGrowthAvg::Float64
+    cycResGrowthAvg::Float64
+    resGrowthSpread::Float64
+end
+
+struct CellLevelResult
+    powerKw::Float64
+    SOC::Float64
+    SOH::Float64
+    steps::Vector{CellStep}
+end
+
+struct CellLevelLiIonBattery <: EnergyStorageSystem
+    ratings::CellModuleRatings
+    states::CellLevelStates
     chIn::Channel{String}
     chOut::Channel{String}
     task::Any
-    state::Dict{String,Any}
-    bmsRecords::Vector{Dict{String,Any}}
-    bmsSummary::Dict{String,Any}
-    bmsConfig::Dict{String,Any}
-    bmsRecordFields::Vector{String}
 end
 
-function cell_pack_energy_kwh(ns, np, nm, q_cell_ah, v_cell_nom)
+const CELL_POINT_HEADERS = (
+    :SOH,
+    :cellSocMin,
+    :cellSocMax,
+    :cellVMin,
+    :cellVMax,
+    :cellVAvg,
+    :moduleVoltage,
+    :tempMin,
+    :tempMax,
+    :tempAvg,
+    :capFadeAvg,
+    :calFadeAvg,
+    :cycFadeAvg,
+    :capFadeSpread,
+    :sohMin,
+    :resGrowthAvg,
+    :calResGrowthAvg,
+    :cycResGrowthAvg,
+    :resGrowthSpread,
+)
+
+const CELL_PERIOD_HEADERS = (:moduleCurrentA, :nCellsBalancing)
+
+function module_energy_kwh(ns, np, nm, q_cell_ah, v_cell_nom)
     float(ns) * float(np) * float(nm) * float(q_cell_ah) * float(v_cell_nom) / 1000
 end
 
@@ -39,7 +99,7 @@ function _cell_number(dict, key, fallback)
     return value isa Real ? float(value) : float(fallback)
 end
 
-function cell_pack_ratings(cellSimulation::Dict, bmsController=nothing)
+function module_ratings(cellSimulation::Dict, bmsController=nothing)
     ns = max(1, round(Int, _cell_number(cellSimulation, "ns", 1)))
     np = max(1, round(Int, _cell_number(cellSimulation, "np", 1)))
     nm = max(1, round(Int, _cell_number(cellSimulation, "nm", 1)))
@@ -50,37 +110,19 @@ function cell_pack_ratings(cellSimulation::Dict, bmsController=nothing)
         bmsController isa Dict ? get(bmsController, "constraints", Dict()) : Dict()
     soc_min = _cell_number(constraints, "soc_min", 0.0)
     soc_max = _cell_number(constraints, "soc_max", 1.0)
-    e_full = cell_pack_energy_kwh(ns, np, nm, q_cell_ah, v_cell_nom)
-    CellPackRatings(ns, np, nm, q_cell_ah, v_cell_nom, c_max, soc_min, soc_max, e_full, c_max * e_full)
-end
-
-const _BMS_STATE_KEYS = (
-    "powerKw",
-    "SOC",
-    "SOH",
-    "etaRt",
-    "cellVMin",
-    "cellVMax",
-    "cellVAvg",
-    "cellSocMin",
-    "cellSocMax",
-    "cellSocAvg",
-    "cellSocStd",
-    "cellTempMin",
-    "cellTempMax",
-    "cellTempAvg",
-    "cellBalancingEnergyWh",
-    "cellCapacityFadeAvg",
-    "cellResistanceGrowthAvg",
-)
-
-function _merge_bms_state!(state::Dict, responseDict)
-    for key in _BMS_STATE_KEYS
-        if haskey(responseDict, key)
-            state[key] = responseDict[key]
-        end
-    end
-    return state
+    e_full = module_energy_kwh(ns, np, nm, q_cell_ah, v_cell_nom)
+    CellModuleRatings(
+        ns,
+        np,
+        nm,
+        q_cell_ah,
+        v_cell_nom,
+        c_max,
+        soc_min,
+        soc_max,
+        e_full,
+        c_max * e_full,
+    )
 end
 
 function _bms_nested(responseDict, key, fallback)
@@ -94,6 +136,11 @@ function _bms_nested(responseDict, key, fallback)
     return fallback
 end
 
+function _record_float(record, key, fallback = 0.0)
+    value = get(record, key, fallback)
+    return value isa Real ? float(value) : float(fallback)
+end
+
 function bms_compute_payload(powerKw, durationHour, temperatureDegreeC)
     Dict(
         :type => "compute",
@@ -103,6 +150,76 @@ function bms_compute_payload(powerKw, durationHour, temperatureDegreeC)
             :ambient_temp_c => temperatureDegreeC,
         ),
     )
+end
+
+function operation_point(step::CellStep)
+    (
+        powerKw = step.powerKw,
+        SOC = step.SOC,
+        SOH = step.SOH,
+        cellSocMin = step.cellSocMin,
+        cellSocMax = step.cellSocMax,
+        cellVMin = step.cellVMin,
+        cellVMax = step.cellVMax,
+        cellVAvg = step.cellVAvg,
+        moduleVoltage = step.moduleVoltage,
+        tempMin = step.tempMin,
+        tempMax = step.tempMax,
+        tempAvg = step.tempAvg,
+        capFadeAvg = step.capFadeAvg,
+        calFadeAvg = step.calFadeAvg,
+        cycFadeAvg = step.cycFadeAvg,
+        capFadeSpread = step.capFadeSpread,
+        sohMin = step.sohMin,
+        resGrowthAvg = step.resGrowthAvg,
+        calResGrowthAvg = step.calResGrowthAvg,
+        cycResGrowthAvg = step.cycResGrowthAvg,
+        resGrowthSpread = step.resGrowthSpread,
+        moduleCurrentA = step.moduleCurrentA,
+        nCellsBalancing = step.nCellsBalancing,
+    )
+end
+
+function _parse_cell_step(record::Dict, nm::Integer, fallbackSoc::Real, fallbackSoh::Real)
+    sohPct = get(record, "soh_avg", nothing)
+    sohMinPct = get(record, "soh_min", nothing)
+    soh = sohPct isa Real ? float(sohPct) / 100 : float(fallbackSoh)
+    sohMin = sohMinPct isa Real ? float(sohMinPct) / 100 : soh
+    CellStep(
+        _record_float(record, "time"),
+        _record_float(record, "module_power_kw") * float(nm),
+        _record_float(record, "soc_avg", fallbackSoc),
+        soh,
+        _record_float(record, "soc_min"),
+        _record_float(record, "soc_max"),
+        _record_float(record, "cell_v_min"),
+        _record_float(record, "cell_v_max"),
+        _record_float(record, "cell_v_avg"),
+        _record_float(record, "module_voltage"),
+        _record_float(record, "temp_min", 25.0),
+        _record_float(record, "temp_max", 25.0),
+        _record_float(record, "temp_avg", 25.0),
+        _record_float(record, "module_current"),
+        _record_float(record, "n_cells_balancing"),
+        _record_float(record, "cap_fade_avg"),
+        _record_float(record, "cal_fade_avg"),
+        _record_float(record, "cyc_fade_avg"),
+        _record_float(record, "cap_fade_spread"),
+        sohMin,
+        _record_float(record, "res_growth_avg"),
+        _record_float(record, "cal_res_growth_avg"),
+        _record_float(record, "cyc_res_growth_avg"),
+        _record_float(record, "res_growth_spread"),
+    )
+end
+
+function _response_records(responseDict)
+    records = get(responseDict, "bmsRecords", nothing)
+    if records isa Vector
+        return [record for record in records if record isa Dict]
+    end
+    record = get(responseDict, "bmsRecord", nothing)
+    return record isa Dict ? Dict[record] : Dict[]
 end
 
 function _start_bms_connection(chIn::Channel{String}, chOut::Channel{String})
@@ -141,23 +258,6 @@ function _start_bms_connection(chIn::Channel{String}, chOut::Channel{String})
     end
 end
 
-function _bms_state_float(
-    ess::CellLevelLiIonBattery,
-    key::String,
-    fallback::Real,
-)
-    value = get(ess.state, key, fallback)
-    return value isa Real ? float(value) : float(fallback)
-end
-
-function _bms_initial_state()
-    Dict{String,Any}(
-        "powerKw" => 0.0,
-        "SOC" => 0.5,
-        "SOH" => 1.0,
-    )
-end
-
 function CellLevelLiIonBattery(
     batteryType::AbstractString,
     cellSimulation::Dict,
@@ -167,7 +267,7 @@ function CellLevelLiIonBattery(
     chOut = Channel{String}(1)
     task = _start_bms_connection(chIn, chOut)
 
-    ratings = cell_pack_ratings(cellSimulation, bmsController)
+    ratings = module_ratings(cellSimulation, bmsController)
     initPayload = Dict(
         :type => "initialize",
         :payload => Dict(
@@ -193,36 +293,22 @@ function CellLevelLiIonBattery(
         )
     end
 
-    state = _bms_initial_state()
-    if get(responseDict, "state", nothing) isa Dict
-        _merge_bms_state!(state, responseDict["state"])
-    end
-    _merge_bms_state!(state, responseDict)
-
-    bmsSummary = _bms_nested(responseDict, "bmsSummary", Dict{String,Any}())
-    bmsConfig = _bms_nested(responseDict, "bmsConfig", Dict{String,Any}())
-    bmsRecordFields = _bms_nested(responseDict, "bmsRecordFields", String[])
+    soc = _bms_nested(responseDict, "SOC", 0.5)
+    soh = _bms_nested(responseDict, "SOH", 1.0)
     etaRt = _bms_nested(responseDict, "etaRt", 1.0)
-    etaRt = etaRt isa Real ? float(etaRt) : 1.0
-
-    return CellLevelLiIonBattery(
-        ratings,
-        etaRt,
-        chIn,
-        chOut,
-        task,
-        state,
-        Dict{String,Any}[],
-        bmsSummary isa Dict ? bmsSummary : Dict{String,Any}(),
-        bmsConfig isa Dict ? bmsConfig : Dict{String,Any}(),
-        bmsRecordFields isa Vector ? string.(bmsRecordFields) : String[],
+    states = CellLevelStates(
+        0.0,
+        soc isa Real ? float(soc) : 0.5,
+        soh isa Real ? float(soh) : 1.0,
+        etaRt isa Real ? float(etaRt) : 1.0,
     )
+    return CellLevelLiIonBattery(ratings, states, chIn, chOut, task)
 end
 
-ηRT(ess::CellLevelLiIonBattery) = ess.eta_rt
+ηRT(ess::CellLevelLiIonBattery) = ess.states.eta_rt
 self_discharge_rate(::CellLevelLiIonBattery) = 0.0
-SOC(ess::CellLevelLiIonBattery) = _bms_state_float(ess, "SOC", 0.5)
-SOH(ess::CellLevelLiIonBattery) = _bms_state_float(ess, "SOH", 1.0)
+SOC(ess::CellLevelLiIonBattery) = ess.states.SOC
+SOH(ess::CellLevelLiIonBattery) = ess.states.SOH
 energy_state(ess::CellLevelLiIonBattery) = SOC(ess) * e_max(ess)
 e_max(ess::CellLevelLiIonBattery) = ess.ratings.e_full_kwh
 e_min(::CellLevelLiIonBattery) = 0.0
@@ -264,209 +350,249 @@ function _operate!(
         error(responseDict["error"])
     end
 
-    _merge_bms_state!(ess.state, responseDict)
-    if haskey(responseDict, "etaRt") && responseDict["etaRt"] isa Real
-        ess.eta_rt = float(responseDict["etaRt"])
+    fallbackSoh = SOH(ess)
+    steps = CellStep[
+        _parse_cell_step(record, ess.ratings.nm, SOC(ess), fallbackSoh) for
+        record in _response_records(responseDict)
+    ]
+    delivered = _bms_nested(responseDict, "powerKw", powerKw)
+    soc = _bms_nested(responseDict, "SOC", SOC(ess))
+    soh = _bms_nested(responseDict, "SOH", fallbackSoh)
+    ess.states.powerKw = delivered isa Real ? float(delivered) : float(powerKw)
+    ess.states.SOC = soc isa Real ? float(soc) : SOC(ess)
+    ess.states.SOH = soh isa Real ? float(soh) : fallbackSoh
+    etaRt = get(responseDict, "etaRt", nothing)
+    if etaRt isa Real
+        ess.states.eta_rt = float(etaRt)
     end
-    bmsRecords = get(responseDict, "bmsRecords", nothing)
-    if bmsRecords isa Vector
-        for record in bmsRecords
-            if record isa Dict
-                push!(ess.bmsRecords, copy(record))
-            end
-        end
-    elseif get(responseDict, "bmsRecord", nothing) isa Dict
-        push!(ess.bmsRecords, copy(responseDict["bmsRecord"]))
-    end
-
-    if get(responseDict, "bmsSummary", nothing) isa Dict
-        ess.bmsSummary = copy(responseDict["bmsSummary"])
-    end
-    if get(responseDict, "bmsConfig", nothing) isa Dict
-        ess.bmsConfig = copy(responseDict["bmsConfig"])
-    end
-    if get(responseDict, "bmsRecordFields", nothing) isa Vector
-        ess.bmsRecordFields = string.(responseDict["bmsRecordFields"])
-    end
-
-    return (;
-        powerKw = _bms_state_float(ess, "powerKw", powerKw),
-        SOC = SOC(ess),
-        SOH = SOH(ess),
-    )
+    return CellLevelResult(ess.states.powerKw, ess.states.SOC, ess.states.SOH, steps)
 end
 
-initialize_extra_operations(ess::CellLevelLiIonBattery) = (
-    [PointSeries([SOH(ess)])],
-    [:SOH],
-)
+function initialize_extra_operations(ess::CellLevelLiIonBattery)
+    soc = SOC(ess)
+    soh = SOH(ess)
+    v = ess.ratings.v_cell_nom
+    series = Series[
+        PointSeries([soh]),
+        PointSeries([soc]),
+        PointSeries([soc]),
+        PointSeries([v]),
+        PointSeries([v]),
+        PointSeries([v]),
+        PointSeries([ess.ratings.ns * v]),
+        PointSeries([25.0]),
+        PointSeries([25.0]),
+        PointSeries([25.0]),
+        PointSeries([0.0]),
+        PointSeries([0.0]),
+        PointSeries([0.0]),
+        PointSeries([0.0]),
+        PointSeries([soh]),
+        PointSeries([0.0]),
+        PointSeries([0.0]),
+        PointSeries([0.0]),
+        PointSeries([0.0]),
+        PeriodSeries{Float64}(),
+        PeriodSeries{Float64}(),
+    ]
+    headers = Symbol[
+        CELL_POINT_HEADERS...,
+        CELL_PERIOD_HEADERS...,
+    ]
+    return series, headers
+end
 
 function CtrlEvalEngine.cleanup(ess::CellLevelLiIonBattery)
     close(ess.chOut)
     wait(ess.task)
 end
 
-function _bms_elapsed_seconds(record::Dict{String,Any})
-    value = get(record, "time", 0.0)
-    if value isa Real
-        return Float64(value)
-    end
-    try
-        return parse(Float64, string(value))
-    catch
-        return 0.0
-    end
-end
-
-function _bms_timestamp(startTimestamp::Dates.DateTime, record::Dict{String,Any})
-    elapsedMs = round(Int, _bms_elapsed_seconds(record) * 1000.0)
-    return string(startTimestamp + Dates.Millisecond(elapsedMs))
-end
-
-function _bms_records_with_timestamps(
-    ess::CellLevelLiIonBattery,
+function append_cell_steps!(
     operation::TimeFrame,
+    tEnd::DateTime,
+    result::CellLevelResult,
 )
-    startTimestamp = operation.t[1]
-    records = Dict{String,Any}[]
-    for record in ess.bmsRecords
-        stampedRecord = copy(record)
-        stampedRecord["timestamp"] = _bms_timestamp(startTimestamp, record)
-        push!(records, stampedRecord)
+    if isempty(result.steps)
+        return operation
     end
-    return records
+    origin = operation.t[1]
+    for step in result.steps
+        stamp = origin + Dates.Millisecond(round(Int, step.elapsedS * 1000))
+        if stamp <= operation.t[end]
+            stamp = operation.t[end] + Dates.Millisecond(1)
+        end
+        push!(operation, stamp, operation_point(step))
+    end
+    return operation
 end
 
-function bms_output(ess::CellLevelLiIonBattery, operation::TimeFrame)
-    return Dict(
-        :records => _bms_records_with_timestamps(ess, operation),
-        :summary => ess.bmsSummary,
-        :config => ess.bmsConfig,
-        :recordFields => ess.bmsRecordFields,
+function _band(x, y, yLow, yHigh, name)
+    Dict(
+        :x => x,
+        :y => y,
+        :yLow => yLow,
+        :yHigh => yHigh,
+        :type => "band",
+        :name => name,
     )
 end
 
-function _bms_series(records, field::String; scale = 1.0, default = 0.0)
-    map(records) do record
-        value = get(record, field, default)
-        value isa Real ? Float64(value) * scale : default
-    end
-end
-
-function _bms_has_field(records, field::String)
-    any(record -> haskey(record, field), records)
-end
-
-function bms_chart_data(ess::CellLevelLiIonBattery, operation::TimeFrame)
-    records = _bms_records_with_timestamps(ess, operation)
-    if isempty(records)
+function cell_level_charts(operation::TimeFrame)
+    if !(:cellVAvg in operation.headers)
         return Any[]
     end
-
-    x = [record["timestamp"] for record in records]
+    t = operation.t
     charts = Any[
         Dict(
-            :title => "BMS Pack Operation",
-            :height => "400px",
-            :xAxis => Dict(:title => "Time"),
-            :yAxisLeft => Dict(:title => "Power (kW)"),
-            :yAxisRight => Dict(:title => "Module current (A)"),
-            :data => [
-                Dict(
-                    :x => x,
-                    :y => _bms_series(records, "pack_power_kw"; scale = float(ess.ratings.nm)),
-                    :type => "instance",
-                    :name => "Plant Power",
-                ),
-                Dict(
-                    :x => x,
-                    :y => _bms_series(records, "pack_current"),
-                    :type => "instance",
-                    :name => "Module Current",
-                    :yAxis => "right",
-                ),
-            ],
-        ),
-        Dict(
-            :title => "BMS Cell SOC",
+            :title => "Cell SOC",
             :height => "400px",
             :xAxis => Dict(:title => "Time"),
             :yAxisLeft => Dict(:title => "SOC", :tickformat => ",.0%"),
             :data => [
-                Dict(:x => x, :y => _bms_series(records, "soc_avg"), :type => "instance", :name => "SOC Avg"),
-                Dict(:x => x, :y => _bms_series(records, "soc_min"), :type => "instance", :name => "SOC Min"),
-                Dict(:x => x, :y => _bms_series(records, "soc_max"), :type => "instance", :name => "SOC Max"),
+                _band(
+                    t,
+                    CtrlEvalEngine.column_data(operation, :SOC),
+                    CtrlEvalEngine.column_data(operation, :cellSocMin),
+                    CtrlEvalEngine.column_data(operation, :cellSocMax),
+                    "Cell SOC",
+                ),
             ],
         ),
         Dict(
-            :title => "BMS Pack Voltage",
+            :title => "Cell Voltage",
             :height => "400px",
             :xAxis => Dict(:title => "Time"),
             :yAxisLeft => Dict(:title => "Voltage (V)"),
             :data => [
-                Dict(:x => x, :y => _bms_series(records, "pack_voltage"), :type => "instance", :name => "Pack Voltage"),
+                _band(
+                    t,
+                    CtrlEvalEngine.column_data(operation, :cellVAvg),
+                    CtrlEvalEngine.column_data(operation, :cellVMin),
+                    CtrlEvalEngine.column_data(operation, :cellVMax),
+                    "Cell Voltage",
+                ),
+                Dict(
+                    :x => t,
+                    :y => CtrlEvalEngine.column_data(operation, :moduleVoltage),
+                    :type => "instance",
+                    :name => "Module Voltage",
+                    :yAxis => "right",
+                ),
             ],
+            :yAxisRight => Dict(:title => "Module Voltage (V)"),
         ),
         Dict(
-            :title => "BMS Temperature and Balancing",
+            :title => "Temperature and Balancing",
             :height => "400px",
             :xAxis => Dict(:title => "Time"),
             :yAxisLeft => Dict(:title => "Temperature (C)"),
             :yAxisRight => Dict(:title => "Cells Balancing"),
             :data => [
-                Dict(:x => x, :y => _bms_series(records, "temp_avg"), :type => "instance", :name => "Temperature Avg"),
-                Dict(:x => x, :y => _bms_series(records, "temp_min"), :type => "instance", :name => "Temperature Min"),
-                Dict(:x => x, :y => _bms_series(records, "temp_max"), :type => "instance", :name => "Temperature Max"),
+                _band(
+                    t,
+                    CtrlEvalEngine.column_data(operation, :tempAvg),
+                    CtrlEvalEngine.column_data(operation, :tempMin),
+                    CtrlEvalEngine.column_data(operation, :tempMax),
+                    "Temperature",
+                ),
                 Dict(
-                    :x => x,
-                    :y => _bms_series(records, "n_cells_balancing"),
-                    :type => "instance",
+                    :x => t,
+                    :y => CtrlEvalEngine.column_data(operation, :nCellsBalancing),
+                    :type => "interval",
                     :name => "Cells Balancing",
                     :yAxis => "right",
                 ),
             ],
         ),
+        Dict(
+            :title => "Module Current",
+            :height => "400px",
+            :xAxis => Dict(:title => "Time"),
+            :yAxisLeft => Dict(:title => "Module current (A)"),
+            :data => [
+                Dict(
+                    :x => t,
+                    :y => CtrlEvalEngine.column_data(operation, :moduleCurrentA),
+                    :type => "interval",
+                    :name => "Module Current",
+                ),
+            ],
+        ),
     ]
-
-    if _bms_has_field(records, "cap_fade_avg")
+    fade = CtrlEvalEngine.column_data(operation, :capFadeAvg)
+    if any(value -> value != 0, fade)
         push!(
             charts,
             Dict(
-                :title => "BMS Capacity Fade",
+                :title => "Capacity Fade",
                 :height => "400px",
                 :xAxis => Dict(:title => "Time"),
                 :yAxisLeft => Dict(:title => "Capacity Fade", :tickformat => ",.2%"),
                 :data => [
-                    Dict(:x => x, :y => _bms_series(records, "cap_fade_avg"), :type => "instance", :name => "Total Avg"),
-                    Dict(:x => x, :y => _bms_series(records, "cal_fade_avg"), :type => "instance", :name => "Calendar Avg"),
-                    Dict(:x => x, :y => _bms_series(records, "cyc_fade_avg"), :type => "instance", :name => "Cycle Avg"),
-                    Dict(:x => x, :y => _bms_series(records, "cap_fade_spread"), :type => "instance", :name => "Cell Spread"),
+                    Dict(:x => t, :y => fade, :type => "instance", :name => "Total Avg"),
+                    Dict(
+                        :x => t,
+                        :y => CtrlEvalEngine.column_data(operation, :calFadeAvg),
+                        :type => "instance",
+                        :name => "Calendar Avg",
+                    ),
+                    Dict(
+                        :x => t,
+                        :y => CtrlEvalEngine.column_data(operation, :cycFadeAvg),
+                        :type => "instance",
+                        :name => "Cycle Avg",
+                    ),
+                    Dict(
+                        :x => t,
+                        :y => CtrlEvalEngine.column_data(operation, :capFadeSpread),
+                        :type => "instance",
+                        :name => "Cell Spread",
+                    ),
                 ],
             ),
             Dict(
-                :title => "BMS State of Health",
+                :title => "Cell State of Health",
                 :height => "400px",
                 :xAxis => Dict(:title => "Time"),
                 :yAxisLeft => Dict(:title => "SOH", :tickformat => ",.0%"),
                 :data => [
-                    Dict(:x => x, :y => _bms_series(records, "soh_avg"; scale = 0.01), :type => "instance", :name => "SOH Avg"),
-                    Dict(:x => x, :y => _bms_series(records, "soh_min"; scale = 0.01), :type => "instance", :name => "SOH Min"),
+                    Dict(:x => t, :y => CtrlEvalEngine.column_data(operation, :SOH), :type => "instance", :name => "SOH Avg"),
+                    Dict(:x => t, :y => CtrlEvalEngine.column_data(operation, :sohMin), :type => "instance", :name => "SOH Min"),
                 ],
             ),
             Dict(
-                :title => "BMS Resistance Growth",
+                :title => "Resistance Growth",
                 :height => "400px",
                 :xAxis => Dict(:title => "Time"),
                 :yAxisLeft => Dict(:title => "Resistance Growth", :tickformat => ",.2%"),
                 :data => [
-                    Dict(:x => x, :y => _bms_series(records, "res_growth_avg"), :type => "instance", :name => "Total Avg"),
-                    Dict(:x => x, :y => _bms_series(records, "cal_res_growth_avg"), :type => "instance", :name => "Calendar Avg"),
-                    Dict(:x => x, :y => _bms_series(records, "cyc_res_growth_avg"), :type => "instance", :name => "Cycle Avg"),
-                    Dict(:x => x, :y => _bms_series(records, "res_growth_spread"), :type => "instance", :name => "Cell Spread"),
+                    Dict(
+                        :x => t,
+                        :y => CtrlEvalEngine.column_data(operation, :resGrowthAvg),
+                        :type => "instance",
+                        :name => "Total Avg",
+                    ),
+                    Dict(
+                        :x => t,
+                        :y => CtrlEvalEngine.column_data(operation, :calResGrowthAvg),
+                        :type => "instance",
+                        :name => "Calendar Avg",
+                    ),
+                    Dict(
+                        :x => t,
+                        :y => CtrlEvalEngine.column_data(operation, :cycResGrowthAvg),
+                        :type => "instance",
+                        :name => "Cycle Avg",
+                    ),
+                    Dict(
+                        :x => t,
+                        :y => CtrlEvalEngine.column_data(operation, :resGrowthSpread),
+                        :type => "instance",
+                        :name => "Cell Spread",
+                    ),
                 ],
             ),
         )
     end
-
     return charts
 end
