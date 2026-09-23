@@ -1,4 +1,4 @@
-using HTTP, HTTP.WebSockets, Sockets
+using HTTP, HTTP.WebSockets
 using JSON
 
 const BMS_CONTROL_PORT = 7000
@@ -228,8 +228,8 @@ function _start_bms_connection(chIn::Channel{String}, chOut::Channel{String})
             try
                 WebSockets.open("ws://localhost:$BMS_CONTROL_PORT") do ws
                     for msg in chOut
-                        send(ws, msg)
-                        put!(chIn, receive(ws))
+                        HTTP.WebSockets.send(ws, msg)
+                        put!(chIn, HTTP.WebSockets.receive(ws))
                     end
                     close(chIn)
                 end
