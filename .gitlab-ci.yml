@@ -27,19 +27,29 @@ retag:
     - aws
     - instance
   script:
-    - >
-      aws ecr batch-get-image
-      --region "${AWS_REGION}"
-      --repository-name "${IMAGE_REPO}"
-      --image-ids imageTag="${SRC_TAG}"
-      --query 'images[0].imageManifest'
-      --output text > image-manifest.json
-    - >
-      aws ecr put-image
-      --region "${AWS_REGION}"
-      --repository-name "${IMAGE_REPO}"
-      --image-tag "${DST_TAG}"
-      --image-manifest file://image-manifest.json
+    - |
+      set -eu
+      aws ecr batch-get-image \
+        --region "${AWS_REGION}" \
+        --repository-name "${IMAGE_REPO}" \
+        --image-ids imageTag="${SRC_TAG}" \
+        --query 'images[0].imageManifest' \
+        --output text > image-manifest.json
+      manifest=$(cat image-manifest.json)
+      if [ -z "${manifest}" ] || [ "${manifest}" = "None" ]; then
+        echo "ECR tag ${SRC_TAG} was not found in ${IMAGE_REPO}" >&2
+        exit 1
+      fi
+      # put-image rejects a tag that already exists, including on a mutable repository.
+      aws ecr batch-delete-image \
+        --region "${AWS_REGION}" \
+        --repository-name "${IMAGE_REPO}" \
+        --image-ids imageTag="${DST_TAG}" || true
+      aws ecr put-image \
+        --region "${AWS_REGION}" \
+        --repository-name "${IMAGE_REPO}" \
+        --image-tag "${DST_TAG}" \
+        --image-manifest file://image-manifest.json
   rules:
     - if: $CI_COMMIT_BRANCH == 'staging'
       variables:
