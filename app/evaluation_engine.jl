@@ -51,11 +51,11 @@ else
     if haskey(outputDict, :error)
         @warn "Error occurred. Uploading info for debugging"
         s3_copy(BUCKET_NAME, "input/$JOB_ID.json"; to_path = "error/$JOB_ID/input.json")
-        s3_put(BUCKET_NAME, "error/$JOB_ID/output.json", JSON.json(outputDict, 4))
-        s3_put(BUCKET_NAME, "error/$JOB_ID/stacktrace.txt", outputDict[:stacktrace])
+        CtrlEvalEngine.upload_s3_text(BUCKET_NAME, "error/$JOB_ID/output.json", JSON.json(outputDict, 4))
+        CtrlEvalEngine.upload_s3_text(BUCKET_NAME, "error/$JOB_ID/stacktrace.txt", outputDict[:stacktrace])
     end
 
     @info "Uploading output data"
-    s3_put(BUCKET_NAME, "output/$JOB_ID.json", JSON.json(outputDict))
+    CtrlEvalEngine.upload_s3_text(BUCKET_NAME, "output/$JOB_ID.json", JSON.json(outputDict))
 end
 @info "Exiting"

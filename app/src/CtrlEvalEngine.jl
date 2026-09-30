@@ -1,5 +1,6 @@
 module CtrlEvalEngine
 using AWSS3
+using AWS: global_aws_config
 using JSON
 using Dates
 
@@ -64,6 +65,8 @@ using .EnergyStorageSimulators
 using .EnergyStorageUseCases
 using .EnergyStorageScheduling
 using .EnergyStorageRTControl
+
+include("s3_upload.jl")
 
 """
     generate_output_dict(progress, useCases)
@@ -285,7 +288,7 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
     if debug
         @debug "Progress updated" t progress
     else
-        s3_put(BUCKET_NAME, "$JOB_ID/progress.json", JSON.json(progress))
+        upload_s3_text(BUCKET_NAME, "$JOB_ID/progress.json", JSON.json(progress))
     end
     lastProgressUpdateTime = now()
 
@@ -325,7 +328,7 @@ function evaluate_controller(inputDict, BUCKET_NAME, JOB_ID; debug = false)
                     if debug
                         @debug "Progress updated" t progress
                     else
-                        s3_put(BUCKET_NAME, "$JOB_ID/progress.json", JSON.json(progress))
+                        upload_s3_text(BUCKET_NAME, "$JOB_ID/progress.json", JSON.json(progress))
                     end
                     lastProgressUpdateTime = now()
                 end
