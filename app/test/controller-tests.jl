@@ -44,7 +44,7 @@ ess =
     LiIonBattery(LFP_LiIonBatterySpecs(500, 10000, 0.85, 2000), LiIonBatteryStates(0.5, 0))
 tStart = floor(now(), Hour(1))
 
-# include("mesa-controller-tests.jl")
+include("mesa-controller-tests.jl")
 
 @testset "PID Controller" begin
     useCases = UseCase[EnergyArbitrage(

@@ -122,9 +122,9 @@ function apply_energy_limits(
 end
 
 function previous_WIP(mode::MesaMode)
-    wipLength = length(mode.params.modeWIP.value)
-    previousIdx = wipLength > 1 ? wipLength - 1 : 1
-    return mode.params.modeWIP.value[previousIdx]
+    wip = raw_vector(mode.params.modeWIP)
+    previousIdx = length(wip) > 1 ? length(wip) - 1 : 1
+    return wip[previousIdx]
 end
 
 function control(
@@ -141,7 +141,7 @@ function control(
     if controller.wip === nothing
         controller.wip = FixedIntervalTimeSeries(t, controller.resolution, [0.0])
     else
-        push!(controller.wip.value, 0.0)
+        push!(raw_vector(controller.wip), 0.0)
     end
     # Call each mode in order of priority:
     sort!(controller.modes, by=m->m.params.priority)
@@ -150,16 +150,16 @@ function control(
         if mode.params.modeWIP === nothing
             mode.params.modeWIP = FixedIntervalTimeSeries(t, controller.resolution, [0.0])
         else
-            push!(mode.params.modeWIP.value, 0.0)
+            push!(raw_vector(mode.params.modeWIP), 0.0)
         end    
         modePower = modecontrol(mode, ess, controller, schedulePeriod, useCases, t, spProgress, p)
-        mode.params.modeWIP.value[end] = modePower
+        raw_vector(mode.params.modeWIP)[end] = modePower
         p = p + modePower
     end
     # Apply limits to the output before controlling:
     essLimitedPower = min(max(p, p_min(ess)), p_max(ess))
     energyLimitedPower = apply_energy_limits(ess, essLimitedPower, Dates.Second(controller.resolution))
-    controller.wip.value[end] = energyLimitedPower
+    raw_vector(controller.wip)[end] = energyLimitedPower
     return FixedIntervalTimeSeries(t, controller.resolution, [energyLimitedPower])
 end
 

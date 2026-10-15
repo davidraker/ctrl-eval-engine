@@ -1,45 +1,10 @@
+# MESA controller tests. Included from controller-tests.jl, which provides `run_controller`, `ess` and `tStart`.
 using CtrlEvalEngine
-using CtrlEvalEngine.EnergyStorageSimulators:
-    LiIonBattery, LFP_LiIonBatterySpecs, LiIonBatteryStates, SOC, SOH, operate!
 using CtrlEvalEngine.EnergyStorageUseCases
 using CtrlEvalEngine.EnergyStorageUseCases: RegulationPricePoint
-
-using CtrlEvalEngine.EnergyStorageScheduling: schedule, ManualScheduler, SchedulePeriod
-using CtrlEvalEngine.EnergyStorageRTControl:
-    control, PIDController, AMAController, RuleBasedController
+using CtrlEvalEngine.EnergyStorageScheduling: create_schedule_period
 using Dates
-using JSON
 using Test
-
-
-function run_controller(ess, controller, schedulePeriod, useCases, tStart)
-    t = tStart
-    opHist = CtrlEvalEngine.OperationHistory([t], Float64[], Float64[SOC(ess)], [SOH(ess)])
-    schedulePeriodEnd = min(end_time(schedulePeriod), tStart + Hour(1))
-    spProgress = VariableIntervalTimeSeries([tStart], Float64[])
-    while t < schedulePeriodEnd
-        controlSequence = control(ess, controller, schedulePeriod, useCases, t, spProgress)
-        for (powerSetpointKw, _, controlPeriodEnd) in controlSequence
-            controlDuration = controlPeriodEnd - t
-            actualPowerKw = operate!(ess, powerSetpointKw, controlDuration)
-            CtrlEvalEngine.update_schedule_period_progress!(
-                spProgress,
-                actualPowerKw,
-                controlDuration,
-            )
-            t += controlDuration
-            CtrlEvalEngine.update_operation_history!(opHist, t, ess, actualPowerKw)
-            if t > schedulePeriodEnd
-                break
-            end
-        end
-    end
-    return spProgress
-end
-
-ess =
-    LiIonBattery(LFP_LiIonBatterySpecs(500, 10000, 0.85, 2000), LiIonBatteryStates(0.5, 0))
-tStart = floor(now(), Hour(1))
 
 using CtrlEvalEngine.EnergyStorageRTControl:
     MesaController,
@@ -71,9 +36,9 @@ using CtrlEvalEngine.EnergyStorageRTControl:
         [FrequencyWattMode(MesaModeParams(1), Millisecond(1000), Millisecond(1000), RampParams(100.0, 200.0, 100.0, 200.0), false, true, 61.0, 59.0, 60.5, 59.5, 10.0, 10.0, 20.0, 20.0)],
         Dates.Second(1)
     )
-    schedulePeriod = SchedulePeriod(65.2, tStart, duration=Second(80))
+    schedulePeriod = create_schedule_period(65.2, tStart; duration = Second(80))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
-    println(controller.wip.value)
+    println(raw_vector(controller.wip))
 end
 
 @testset "AGC MESA Mode" begin
@@ -154,7 +119,7 @@ end
         FixedIntervalTimeSeries(tStart, Dates.Hour(1), [RegulationPricePoint(0.05, 0.42)]),
         50.0,
     )]
-    schedulePeriod = create_schedule_period(65.2, tStart, Second(268), 0.0, 0.0, 500.0)
+    schedulePeriod = create_schedule_period(65.2, tStart; duration = Second(268), regCapKw = 500.0)
     controller = MesaController(
         [AGCMode(MesaModeParams(1), true, RampParams(100, 200, 100, 200), 40.0, 60.0)],
         Dates.Second(4),
@@ -167,6 +132,9 @@ end
     schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
 
     # Test that mode follows the specified power percentage (53% of 500kW is 265kW).
+    # KNOWN-WRONG EXPECTATION: the ramp of 50 kW per 5-minute step encodes the
+    # missing time base in apply_ramps. At 10 %/s of 500 kW the first step would already reach 265 kW.
+    # Rewritten in Phase 1.
     controller = MesaController(
         [
             ChargeDischargeStorageMode(
@@ -182,7 +150,7 @@ end
     )
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     @test all(
-        controller.wip.value .==
+        raw_vector(controller.wip) .==
         [50.0, 100.0, 150.0, 200.0, 250.0, 265.0, 265.0, 265.0, 265.0, 265.0, 265.0, 265.0],
     )
 
@@ -202,7 +170,7 @@ end
     )
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     @test all(
-        controller.wip.value .==
+        raw_vector(controller.wip) .==
         [50.0, 65.2, 65.2, 65.2, 65.2, 65.2, 65.2, 65.2, 65.2, 65.2, 65.2, 65.2],
     )
 
@@ -224,7 +192,7 @@ end
     schedulePeriod = create_schedule_period(-65.2, tStart; duration = Hour(1))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     @test all(
-        controller.wip.value .== [
+        raw_vector(controller.wip) .== [
             -65.2,
             -65.2,
             -65.2,
@@ -246,6 +214,9 @@ end
     schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
     rampParams = RampParams(100.0, 200.0, 100.0, 200.0)
 
+    # KNOWN-WRONG EXPECTATION: ActivePowerLimitMode only bounds what sorted before
+    # it, so it is given the *larger* priority number here, inverting 1815.2 7.1 (zero is highest). Rewritten
+    # in Phase 1 when the limit becomes a Bounding mode applied regardless of priority.
     # Test Discharge Limit:
     controller = MesaController(
         [
@@ -264,7 +235,7 @@ end
     schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     @test all(
-        controller.wip.value .==
+        raw_vector(controller.wip) .==
         [5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0],
     )
 
@@ -286,7 +257,7 @@ end
     schedulePeriod = create_schedule_period(-65.2, tStart; duration = Hour(1))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     @test all(
-        controller.wip.value .== [
+        raw_vector(controller.wip) .== [
             -10.0,
             -10.0,
             -10.0,
@@ -320,7 +291,7 @@ end
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
 
     @test all(
-        controller.wip.value .==
+        raw_vector(controller.wip) .==
         [0.0, 0.0, 0.0, 10.0, 20.0, 10.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
     )
 end
@@ -341,7 +312,7 @@ end
     schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
     @test all(
-        controller.wip.value .==
+        raw_vector(controller.wip) .==
         [0.0, 0.0, 0.0, 1.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
     )
 end
@@ -361,6 +332,6 @@ end
     )
     schedulePeriod = create_schedule_period(65.2, tStart; duration = Hour(1))
     run_controller(ess, controller, schedulePeriod, useCases, tStart)
-    # @test controller.wip.value ==
+    # @test raw_vector(controller.wip) ==
     #       [-2.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -2.0, -3.0, -4.0, -5.0]
 end

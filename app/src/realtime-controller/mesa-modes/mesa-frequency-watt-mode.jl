@@ -94,14 +94,14 @@ function inactive_control(
             mode.fwState.exceededTime = t
         elseif (t - mode.fwState.exceededTime) >= mode.startDelay
             clear_mode_state(mode, "HF")
-            high_frequency_control(ess, mode, meteredFrequency, nominalFrequency, t, currentIterationPower)
+            return high_frequency_control(ess, mode, meteredFrequency, nominalFrequency, t, currentIterationPower)
         end
     elseif meteredFrequency <= mode.lowStartingFrequency
         if mode.fwState.exceededTime === nothing
             mode.fwState.exceededTime = t
         elseif (t - mode.fwState.exceededTime) >= mode.startDelay
             clear_mode_state(mode, "LF")
-            low_frequency_control(ess, mode, meteredFrequency, nominalFrequency, t, currentIterationPower)
+            return low_frequency_control(ess, mode, meteredFrequency, nominalFrequency, t, currentIterationPower)
         end
     else
         mode.fwState.exceededTime = nothing
@@ -122,8 +122,10 @@ function high_frequency_control(
             mode.fwState.exceededTime = t
         elseif (t - mode.fwState.exceededTime) > mode.stopDelay
             clear_mode_state(mode, nothing)
-            inactive_control(ess, mode, meteredFrequency, nominalFrequency, t, currentIterationPower)
+            return inactive_control(ess, mode, meteredFrequency, nominalFrequency, t, currentIterationPower)
         end
+    else
+        mode.fwState.exceededTime = nothing
     end
     if mode.useSnapshotPower
         calculate_gradient_power = get_gradient_power_calculator(mode, currentIterationPower)
@@ -131,8 +133,11 @@ function high_frequency_control(
         mode.fwState.hysteresisValue = min(mode.fwState.hysteresisValue, gradientPower)
         commandPower = mode.useHysteresis ? mode.fwState.hysteresisValue : gradientPower        
     else
-        frequencyPastStart = meteredFrequency - mode.highStartingFrequency
-        powerLimit = p_max(ess) + (gradient * frequencyPastStart)
+        # Boundary interpretation (no snapshot): the maximum generation falls from p_max along the high-frequency
+        # gradient (percent of WMax per percent frequency deviation beyond the start frequency).
+        # TODO: rework with the droop/sensitivity/curve split and shared units.
+        percentPastStart = (meteredFrequency - mode.highStartingFrequency) / nominalFrequency * 100
+        powerLimit = p_max(ess) - mode.highDischargeGradient / 100 * p_max(ess) * percentPastStart
         commandPower = currentIterationPower > powerLimit ? powerLimit - currentIterationPower : 0.0
     end
     return commandPower
@@ -151,8 +156,10 @@ function low_frequency_control(
             mode.fwState.exceededTime = t
         elseif (t - mode.fwState.exceededTime) > mode.stopDelay
             clear_mode_state(mode, nothing)
-            inactive_control(ess, mode, meteredFrequency, nominalFrequency, t, currentIterationPower)
+            return inactive_control(ess, mode, meteredFrequency, nominalFrequency, t, currentIterationPower)
         end
+    else
+        mode.fwState.exceededTime = nothing
     end
     if mode.useSnapshotPower
         calculate_gradient_power = get_gradient_power_calculator(mode, currentIterationPower)
@@ -160,9 +167,11 @@ function low_frequency_control(
         mode.fwState.hysteresisValue = max(mode.fwState.hysteresisValue, gradientPower)
         commandPower = mode.useHysteresis ? mode.fwState.hysteresisValue : gradientPower        
     else
-        frequencyPastStart = meteredFrequency - mode.lowStartingFrequency
-        # TODO: Where does this gradient need to come from? The variable is currently undefined.
-        powerLimit = p_min(ess) + (gradient * frequencyPastStart)
+        # Boundary interpretation (no snapshot): the minimum power rises from p_min along the low-frequency
+        # gradient (percent of ChaWMax per percent frequency deviation below the start frequency).
+        # TODO: rework with the droop/sensitivity/curve split and shared units.
+        percentPastStart = (mode.lowStartingFrequency - meteredFrequency) / nominalFrequency * 100
+        powerLimit = p_min(ess) + mode.lowChargeGradient / 100 * abs(p_min(ess)) * percentPastStart
         commandPower = currentIterationPower < powerLimit ? powerLimit - currentIterationPower : 0.0
     end
     return commandPower  # TODO: This should actually have another step. The value calculated should have been percent of max power, not power.

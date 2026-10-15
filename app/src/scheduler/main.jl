@@ -38,8 +38,25 @@ function create_schedule(
     return TimeFrame(timestamps, schSeries, schHeaders)
 end
 
-create_schedule_period(p, tStart::Dates.DateTime; duration::Dates.Period = Hour(1)) =
-    TimeFrameRow(TimeFrame([tStart, tStart + duration], [PeriodSeries([p])], [:powerKw]), 1)
+function create_schedule_period(
+    p,
+    tStart::Dates.DateTime;
+    duration::Dates.Period = Hour(1),
+    SOC::Union{Nothing,Tuple{<:Real,<:Real}} = nothing,
+    regCapKw::Union{Nothing,Real} = nothing,
+)
+    series = Series[PeriodSeries([float(p)])]
+    headers = [:powerKw]
+    if !isnothing(SOC)
+        push!(series, PointSeries([float(SOC[1]), float(SOC[2])]))
+        push!(headers, :SOC)
+    end
+    if !isnothing(regCapKw)
+        push!(series, PeriodSeries([float(regCapKw)]))
+        push!(headers, :regCapKw)
+    end
+    return TimeFrameRow(TimeFrame([tStart, tStart + duration], series, headers), 1)
+end
 
 # Helper functions for schedule-specific TimeFrameRow instances
 average_power(tfr::TimeFrameRow) = tfr[:powerKw][1]

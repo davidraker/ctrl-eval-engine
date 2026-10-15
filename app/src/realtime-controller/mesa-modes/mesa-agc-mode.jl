@@ -35,17 +35,9 @@ function modecontrol(
                 mode.minimumUsableSOC, mode.maximumUsableSOC)
         return energyLimitedPower
     else
-        # Load Following isn't selected, follow schedule
-        remainingTime = EnergyStorageScheduling.end_time(schedulePeriod) - t
-        return FixedIntervalTimeSeries(
-            t,
-            remainingTime,
-            [
-                min(
-                    max(p_min(ess, remainingTime), scheduledPower),
-                    p_max(ess, remainingTime),
-                ),
-            ],
-        )
+        # No AGC target is available (no Regulation use case supplies one), so the mode is enabled but
+        # inactive and contributes nothing (IEEE 1815.2 6.4.7). A direct watts
+        # target (DAGC.WSpt) is added in Phase 1 of the plan.
+        return 0.0
     end
 end
