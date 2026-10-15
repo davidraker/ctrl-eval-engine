@@ -18,10 +18,43 @@ export get_rt_controller,
     RuleBasedController,
     MesaController,
     MesaMode,
+    MesaModeParams,
+    MesaStatus,
+    MeterReadings,
+    ModeConflictError,
+    Replacing,
+    Additive,
+    Bounding,
+    Setpoint,
+    Delta,
+    Bounds,
+    kind,
+    enable!,
+    disable!,
+    set_reading!,
+    mesa_status,
+    is_enabled,
+    is_active,
+    ChargeDischargeStorageMode,
+    ActivePowerLimitMode,
+    AGCMode,
+    CoordinatedChargeDischargeMode,
+    FrequencyWattMode,
+    FrequencyWattDroopMode,
+    FrequencyWattCurveMode,
+    VoltWattMode,
+    DynamicVoltWattMode,
+    ActivePowerSmoothingMode,
+    PeakPowerLimitingMode,
+    LoadFollowingMode,
+    GenerationFollowingMode,
+    volt_watt_curve,
+    evaluate_curve,
     Vertex,
     VertexCurve,
     RampParams,
-    previous_WIP
+    previous_WIP,
+    build_mesa_controller
 
 abstract type RTController end
 
@@ -46,6 +79,7 @@ include("pid.jl")
 include("amac.jl")
 include("rule-based.jl")
 include("mesa.jl")
+include("mesa-config.jl")
 include("user-defined.jl")
 
 """
@@ -76,6 +110,8 @@ function get_rt_controller(
             RuleBasedController(config)
         elseif controllerType == "userDefinedRealTime"
             UserDefinedRTController(config, ess, useCases)
+        elseif controllerType == "mesa"
+            build_mesa_controller(config, res)
         else
             throw(InvalidInput("Invalid real-time controller type: $controllerType"))
         end

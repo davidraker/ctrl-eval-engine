@@ -20,6 +20,11 @@ PeakLimiting(input::AbstractDict) = PeakLimiting(
     ),
 )
 
+PeakLimiting(input::AbstractDict, tStart::DateTime, tEnd::DateTime) = begin
+    uc = PeakLimiting(input)
+    PeakLimiting(uc.peakThreshold, extract(uc.realtimePower, tStart, tEnd))
+end
+
 use_case_name(ucPL::PeakLimiting) = "Peak Limiting"
 
 function calculate_metrics(

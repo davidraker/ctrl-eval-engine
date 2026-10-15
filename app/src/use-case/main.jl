@@ -24,7 +24,8 @@ export UseCase,
     DemandChargeReduction,
     demand_charge,
     demand_charge_periods_rates,
-    FrequencyResponse
+    FrequencyResponse,
+    VoltageControl
 
 abstract type UseCase end
 
@@ -175,6 +176,7 @@ include("load-following.jl")
 include("peak-limiting.jl")
 include("generation-following.jl")
 include("frequency-response.jl")
+include("voltage-control.jl")
 include("demand-charge-reduction.jl")
 
 get_use_cases(inputDict::AbstractDict, setting::SimSetting) = [
@@ -190,6 +192,12 @@ get_use_cases(inputDict::AbstractDict, setting::SimSetting) = [
         Regulation(config, setting.simStart, setting.simEnd)
     elseif name === "Demand Charge Reduction"
         DemandChargeReduction(config["data"], setting.simStart, setting.simEnd)
+    elseif name === "Frequency Response"
+        FrequencyResponse(config["data"], setting.simStart, setting.simEnd)
+    elseif name === "Voltage Control"
+        VoltageControl(config["data"], setting.simStart, setting.simEnd)
+    elseif name === "Peak Limiting"
+        PeakLimiting(config["data"], setting.simStart, setting.simEnd)
     else
         throw(InvalidInput("Unknown use case: $name"))
     end for (name, config) in inputDict
