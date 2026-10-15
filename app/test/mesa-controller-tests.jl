@@ -187,6 +187,31 @@ end
     end
 end
 
+@testset "Replacing a mode in place keeps its state" begin
+    ess = mock_ess()
+    cd = ChargeDischargeStorageMode(MesaModeParams(1; RvrtTms = 5); GnWPctSpt = 53.0)
+    c = MesaController([cd], Second(1))
+    sp = period(0.0, tStart; duration = Second(10))
+    spProgress = VariableIntervalTimeSeries([tStart], Float64[])
+    outputs = Float64[]
+    for k = 0:6
+        t = tStart + Second(k)
+        if k == 2   # re-parameterise: 20 % instead of 53 %, same timing; the reversion clock keeps running
+            replace_mode!(c, 1, ChargeDischargeStorageMode(MesaModeParams(1; RvrtTms = 5); GnWPctSpt = 20.0))
+        end
+        p = raw_vector(control(ess, c, sp, UseCase[], t, spProgress))[1]
+        push!(outputs, p)
+        op = operate!(ess, p, Second(1))
+        CtrlEvalEngine.update_schedule_period_progress!(spProgress, op.powerKw, Second(1))
+    end
+    @test outputs == [265.0, 265.0, 100.0, 100.0, 100.0, 0.0, 0.0]
+    @test_throws ModeConflictError replace_mode!(
+        MesaController([AGCMode(MesaModeParams(1); WSpt = 1.0), ChargeDischargeStorageMode(MesaModeParams(2))], Second(1)),
+        2,
+        ActivePowerSmoothingMode(MesaModeParams(2); WSmthGra = 1.0, FilTms = 10),
+    )
+end
+
 @testset "Mutual exclusion (Table 58)" begin
     smoothing(ena) = ActivePowerSmoothingMode(MesaModeParams(2; ModEna = ena); WSmthGra = -0.5, FilTms = Second(10))
     @test_throws ModeConflictError MesaController([AGCMode(MesaModeParams(1); WSpt = 1.0), smoothing(true)], Second(1))

@@ -374,6 +374,34 @@ disable!(controller::MesaController, idx::Integer) = disable!(controller, contro
 "Hook for modes with internal state (timers, snapshots, filters) to clear it on disable."
 reset_state!(::MesaMode) = nothing
 
+"""
+    replace_mode!(controller, idx, mode)
+
+Swap a rebuilt mode (new parameters) into position `idx`, carrying over the old mode's run-time state (enable time,
+window start, activation, work-in-progress series) so the change takes effect without restarting the function.
+Checks mutual exclusion against the other enabled modes.
+"""
+function replace_mode!(controller::MesaController, idx::Integer, mode::MesaMode)
+    old = controller.modes[idx]
+    for (i, other) in enumerate(controller.modes)
+        if i != idx && is_enabled(other) && is_enabled(mode) && conflicts(mode, other)
+            throw(
+                ModeConflictError(
+                    "cannot replace with $(nameof(typeof(mode))): $(nameof(typeof(other))) is enabled and mutually exclusive",
+                ),
+            )
+        end
+    end
+    p, q = old.params, mode.params
+    if q.ModEna && p.ModEna
+        q.enabledAt, q.startAt, q.startKw, q.activeSince = p.enabledAt, p.startAt, p.startKw, p.activeSince
+    end
+    q.attempted = p.attempted
+    q.modeWIP = p.modeWIP
+    controller.modes[idx] = mode
+    return mode
+end
+
 "Hook for modes to report extra status quantities (AGC's watts available, predicted SOC, ...)."
 status_extras(::MesaMode, ::EnergyStorageSystem, ctx) = nothing
 
@@ -660,10 +688,12 @@ function control(
     ess::EnergyStorageSystem,
     controller::MesaController,
     schedulePeriod::TimeFrameRow,
-    useCases::AbstractVector{<:UseCase},
+    useCasesIn::AbstractVector,
     t::Dates.DateTime,
     spProgress,
 )
+    # Callers through PyJulia hand over Vector{Any}; narrow it so the use-case lookups dispatch.
+    useCases = useCasesIn isa AbstractVector{<:UseCase} ? useCasesIn : UseCase[uc for uc in useCasesIn]
     n = length(controller.modes)
     status = controller.status
     if length(status.enabled) != n
