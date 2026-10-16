@@ -9,3 +9,7 @@ app/*.json
 
 Manifest.toml
 test/Manifest.toml
+dist/
+build/
+*.egg-info/
+*.log
